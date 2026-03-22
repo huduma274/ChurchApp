@@ -11,6 +11,9 @@
 <title>Mount of Olives Ministry</title>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;800&family=Nunito:wght@300;400;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Firebase Realtime Database (for cross-device real-time sync) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <style>
 :root {
   --blue-deep:#0a1f5c; --blue-mid:#1a3a8f; --blue-bright:#2563eb;
@@ -2152,6 +2155,38 @@ const K={admins:'mom_a6',testimony:'mom_t4',walawi:'mom_w4',kawaida:'mom_k4',ses
   headcount:'mom_headcount_v1',reportLog:'mom_report_log_v1',reportConfig:'mom_report_cfg_v1',
   subDepts:'mom_subdepts_v1'};
 const K_TYPO         = 'mom_typography_v1';
+
+// ═══════════════════════════════════════════════════════════════
+// ██  FIREBASE REAL-TIME SYNC  ██
+// Paste your Firebase project config below.
+// Get it from: Firebase Console → Project Settings → Your apps → Config
+// ═══════════════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAxP1h2LCv-Yeo2-X0-eLXYEWpjgBSUIOI",
+  authDomain:        "momi-d8281.firebaseapp.com",
+  databaseURL:       "https://momi-d8281-default-rtdb.firebaseio.com",
+  projectId:         "momi-d8281",
+  storageBucket:     "momi-d8281.firebasestorage.app",
+  messagingSenderId: "69322800273",
+  appId:             "1:69322800273:web:4145f9e0fd6c67c0f39330"
+};
+// Firebase database node paths
+const FB_NAMES_PATH = 'mom-ministry/testimony/names';
+const FB_NOTES_PATH = 'mom-ministry/stickyNotes';
+// Firebase objects (initialised below; null if config not yet filled in)
+let _fbApp = null, _fbDb = null;
+(function(){
+  try {
+    const isConfigured = FIREBASE_CONFIG.apiKey && !FIREBASE_CONFIG.apiKey.startsWith('PASTE_');
+    if(isConfigured){
+      _fbApp = firebase.initializeApp(FIREBASE_CONFIG);
+      _fbDb  = firebase.database(_fbApp);
+      console.log('[MOM] Firebase connected ✔');
+    } else {
+      console.warn('[MOM] Firebase config not filled in — running in local-only mode.');
+    }
+  } catch(e){ console.warn('[MOM] Firebase init error:', e); }
+})();
 const K_LOGO         = 'mom_custom_logo';
 const K_BG           = 'mom_custom_bg';
 const K_LOGO_SIZE    = 'mom_logo_size';
@@ -2669,7 +2704,12 @@ function addKRow(){
 }
 function delKRow(i){const d=ld(K.kawaida,[]);d.splice(i,1);sv(K.kawaida,d);renderK();}
 function getNms(){return ld(K.testimony,[]);}
-function saveNms(n){sv(K.testimony,n);try{localStorage.setItem(K.testimony+'_p',Date.now());_memStore[K.testimony+'_p']=Date.now();}catch(e){_memStore[K.testimony+'_p']=Date.now();}}
+function saveNms(n){
+  sv(K.testimony,n);
+  try{localStorage.setItem(K.testimony+'_p',Date.now());_memStore[K.testimony+'_p']=Date.now();}catch(e){_memStore[K.testimony+'_p']=Date.now();}
+  // Write to Firebase so all devices update instantly
+  if(_fbDb){ _fbDb.ref(FB_NAMES_PATH).set(n).catch(function(e){ console.warn('[MOM] Firebase names write error:',e); }); }
+}
 function renderNames(){
   const names=getNms();
   const canDel=CU&&(CU.role==='super'||CU.permissions.ushuhuda);
@@ -6617,7 +6657,11 @@ function isServiceLeader(){
 }
 
 function getStickyNotes(){ return ld(STICKY_KEY, []); }
-function saveStickyNotes(notes){ sv(STICKY_KEY, notes); }
+function saveStickyNotes(notes){
+  sv(STICKY_KEY, notes);
+  // Write to Firebase so Msimamizi / service leaders see notes instantly
+  if(_fbDb){ _fbDb.ref(FB_NOTES_PATH).set(notes).catch(function(e){ console.warn('[MOM] Firebase notes write error:',e); }); }
+}
 
 function openStickyModal(){
   if(!isStickyUser()) return;
@@ -7478,6 +7522,68 @@ document.addEventListener('DOMContentLoaded', function(){
     if(typeof renderUsers === 'function') renderUsers();
     if(typeof showToast === 'function') showToast('Users synced successfully', 'success');
   };
+})();
+</script>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FIREBASE REAL-TIME LISTENERS                                   -->
+<!-- Connects testimony names and sticky notes to Firebase so       -->
+<!-- ALL devices (including Msimamizi's screen) update instantly    -->
+<!-- when any change is made.                                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<script>
+(function(){
+  // Wait until the DOM is ready and all app functions are defined
+  function attachFirebaseListeners(){
+    if(!_fbDb){
+      console.warn('[MOM] Firebase not connected — real-time sync disabled.');
+      return;
+    }
+
+    // ── 1. Testimony Names (Majina ya Ushuhuda) ──────────────────
+    // Any device that saves a name → Firebase pushes the update to
+    // every other browser immediately, no polling needed.
+    _fbDb.ref(FB_NAMES_PATH).on('value', function(snap){
+      var names = snap.val();
+      if(!Array.isArray(names)) names = [];
+      // Update local store silently (no Firebase re-write)
+      try{ localStorage.setItem(K.testimony, JSON.stringify(names)); }catch(e){}
+      _memStore[K.testimony] = names;
+      // Re-render only if the user is logged in
+      if(CU && typeof renderNames === 'function') renderNames();
+    }, function(err){
+      console.warn('[MOM] Firebase names listener error:', err);
+    });
+
+    // ── 2. Sticky Notes (to Service Leader / Msimamizi) ──────────
+    // When any member sends a note it is written to Firebase.
+    // Msimamizi's browser receives the push and shows it instantly.
+    _fbDb.ref(FB_NOTES_PATH).on('value', function(snap){
+      var notes = snap.val();
+      if(!Array.isArray(notes)) notes = [];
+      // Update local store silently
+      try{ localStorage.setItem(STICKY_KEY, JSON.stringify(notes)); }catch(e){}
+      _memStore[STICKY_KEY] = notes;
+      // Update the service leader's incoming-notes UI in real time
+      if(CU){
+        if(typeof isServiceLeader === 'function' && isServiceLeader()){
+          if(typeof renderIncomingNotes === 'function') renderIncomingNotes();
+          if(typeof renderReadNotes     === 'function') renderReadNotes();
+        }
+      }
+    }, function(err){
+      console.warn('[MOM] Firebase notes listener error:', err);
+    });
+
+    console.log('[MOM] Firebase real-time listeners attached ✔');
+  }
+
+  // Attach immediately if page is already loaded, else wait for DOMContentLoaded
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', attachFirebaseListeners);
+  } else {
+    attachFirebaseListeners();
+  }
 })();
 </script>
 
