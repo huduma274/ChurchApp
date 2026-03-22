@@ -2171,8 +2171,9 @@ const FIREBASE_CONFIG = {
   appId:             "1:69322800273:web:4145f9e0fd6c67c0f39330"
 };
 // Firebase database node paths
-const FB_NAMES_PATH = 'mom-ministry/testimony/names';
-const FB_NOTES_PATH = 'mom-ministry/stickyNotes';
+const FB_NAMES_PATH     = 'mom-ministry/testimony/names';
+const FB_NOTES_PATH     = 'mom-ministry/stickyNotes';
+const FB_HEADCOUNT_PATH = 'mom-ministry/headcount';
 // Firebase objects (initialised below; null if config not yet filled in)
 let _fbApp = null, _fbDb = null;
 (function(){
@@ -4775,7 +4776,15 @@ const HC_DAYS = [
 ];
 
 function getHeadcountData(){ return ld(K.headcount, {}); }
-function saveHeadcountData(d){ sv(K.headcount, d); }
+function saveHeadcountData(d){
+  sv(K.headcount, d);
+  // Write to Firebase — persists data permanently so admin sees it on any device
+  if(_fbDb){
+    _fbDb.ref(FB_HEADCOUNT_PATH).set(d).catch(function(e){
+      console.warn('[MOM] Firebase headcount write error:', e);
+    });
+  }
+}
 
 function openHeadcount(){
   document.getElementById('dept-detail-name').textContent = 'Headcount / Hesabu';
@@ -7573,6 +7582,31 @@ document.addEventListener('DOMContentLoaded', function(){
       }
     }, function(err){
       console.warn('[MOM] Firebase notes listener error:', err);
+    });
+
+    // ── 3. Attendance / Headcount ─────────────────────────────────
+    // When any usher saves attendance, every admin/super device gets
+    // the updated data immediately — data is never lost on device clear.
+    _fbDb.ref(FB_HEADCOUNT_PATH).on('value', function(snap){
+      var hcData = snap.val();
+      if(!hcData || typeof hcData !== 'object') hcData = {};
+      // Update local store silently (no Firebase re-write)
+      try{ localStorage.setItem(K.headcount, JSON.stringify(hcData)); }catch(e){}
+      _memStore[K.headcount] = hcData;
+      // Refresh analytics/history if that section is currently visible
+      if(CU){
+        if(typeof renderHcHistory === 'function'){
+          var hist = document.getElementById('hc-history-badge');
+          if(hist) renderHcHistory();
+        }
+        // Also refresh the entry grid if it is open
+        if(typeof renderHeadcount === 'function'){
+          var hcGrid = document.getElementById('dept-detail-body');
+          if(hcGrid && hcGrid.querySelector('.hce-wrap')) renderHeadcount();
+        }
+      }
+    }, function(err){
+      console.warn('[MOM] Firebase headcount listener error:', err);
     });
 
     console.log('[MOM] Firebase real-time listeners attached ✔');
