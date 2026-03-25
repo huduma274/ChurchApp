@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -1841,11 +1843,10 @@ html, body {
           <div class="card-hdr"><span>🔄</span><h2>Sync Users Across Devices</h2></div>
           <div class="card-body">
             <p style="font-size:0.84rem;color:var(--text-mid);margin-bottom:14px;line-height:1.5;">
-              Since this app is hosted on Vercel, password changes are saved only in <em>this</em> browser.
-              Use the options below to push updates to all devices.
+              ✅ <strong>Auto-sync is enabled.</strong> Password changes, new users, and all admin updates are saved to Firebase in real time and shared with every device automatically. No manual export needed.
             </p>
             <button class="btn-sm" style="width:100%;padding:11px;margin-bottom:8px;background:linear-gradient(135deg,#1d4ed8,#1e40af);" onclick="openSyncModal()">
-              💾 Sync / Export / Import Users
+              💾 Backup / Export / Import Users
             </button>
           </div>
         </div>
@@ -2174,6 +2175,20 @@ const FIREBASE_CONFIG = {
 const FB_NAMES_PATH     = 'mom-ministry/testimony/names';
 const FB_NOTES_PATH     = 'mom-ministry/stickyNotes';
 const FB_HEADCOUNT_PATH = 'mom-ministry/headcount';
+// Additional paths — every key here gets two-way real-time sync
+const FB_ADMINS_PATH    = 'mom-ministry/admins';
+const FB_WALAWI_PATH    = 'mom-ministry/schedule/walawi';
+const FB_KAWAIDA_PATH   = 'mom-ministry/schedule/kawaida';
+const FB_SETTINGS_PATH  = 'mom-ministry/app/settings';
+const FB_HEADERS_PATH   = 'mom-ministry/app/headers';
+const FB_MENUS_PATH     = 'mom-ministry/app/menus';
+const FB_WINDOWS_PATH   = 'mom-ministry/app/windows';
+const FB_DEPTS_PATH     = 'mom-ministry/app/depts';
+const FB_SUBDEPTS_PATH  = 'mom-ministry/app/subDepts';
+const FB_WASIM_SUN_PATH = 'mom-ministry/wasimamizi/sunday';
+const FB_WASIM_SAT_PATH = 'mom-ministry/wasimamizi/saturday';
+const FB_WASIM_ACC_PATH = 'mom-ministry/wasimamizi/access';
+const FB_USHER_PATH     = 'mom-ministry/app/usherSched';
 // Firebase objects (initialised below; null if config not yet filled in)
 let _fbApp = null, _fbDb = null;
 (function(){
@@ -2201,6 +2216,28 @@ const K_WASIM_SUN    = 'mom_wasim_sun_v1';
 const K_WASIM_SAT    = 'mom_wasim_sat_v1';
 const K_WASIM_ACCESS = 'mom_wasim_access_v2';
 const K_WIN_OVERRIDES= 'mom_win_overrides_v1';
+
+// ── Firebase two-way sync map ──────────────────────────────────
+// Keys listed here are written to Firebase whenever sv() is called
+// (only after _fbInitialized[key] is true — i.e. the first Firebase
+//  value has been received, so we never overwrite Firebase with stale
+//  local defaults on a fresh browser).
+const _fbInitialized = {};   // set to true per-key once Firebase first fires
+const _FB_PATHS = {
+  [K.admins]    : FB_ADMINS_PATH,
+  [K.walawi]    : FB_WALAWI_PATH,
+  [K.kawaida]   : FB_KAWAIDA_PATH,
+  [K.settings]  : FB_SETTINGS_PATH,
+  [K.headers]   : FB_HEADERS_PATH,
+  [K.depts]     : FB_DEPTS_PATH,
+  [K.subDepts]  : FB_SUBDEPTS_PATH,
+  [K_MENUS]     : FB_MENUS_PATH,
+  [K_WINDOWS]   : FB_WINDOWS_PATH,
+  [K_WASIM_SUN] : FB_WASIM_SUN_PATH,
+  [K_WASIM_SAT] : FB_WASIM_SAT_PATH,
+  [K_WASIM_ACCESS]: FB_WASIM_ACC_PATH,
+  [K_USHER_SCHED] : FB_USHER_PATH,
+};
 
 const DEF_HEADERS = {
   wh1:'Wakati / Time', wh2:'Jina / Name',    wh3:'Kazi / Role',
@@ -2283,6 +2320,13 @@ function ld(k,d){
 function sv(k,v){
   if(_lsOK){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
   _memStore[k]=v;
+  // Two-way Firebase sync: only write once Firebase has delivered its initial
+  // snapshot for this key (prevents overwriting Firebase with local defaults).
+  if(_fbDb && _fbInitialized[k] && _FB_PATHS[k]){
+    _fbDb.ref(_FB_PATHS[k]).set(v).catch(function(e){
+      console.warn('[MOM] Firebase sv write error ('+k+'):', e);
+    });
+  }
 }
 function _lsGet(k){try{return localStorage.getItem(k);}catch(e){return _memStore[k]!==undefined?JSON.stringify(_memStore[k]):null;}}
 function _lsDel(k){try{localStorage.removeItem(k);}catch(e){} delete _memStore[k];}
@@ -3961,7 +4005,7 @@ function getMenus(){
   }
   return JSON.parse(JSON.stringify(DEFAULT_MENUS));
 }
-function saveMenus(menus){ try{localStorage.setItem(K_MENUS,JSON.stringify(menus));_memStore[K_MENUS]=JSON.stringify(menus);}catch(e){_memStore[K_MENUS]=JSON.stringify(menus);} }
+function saveMenus(menus){ sv(K_MENUS, menus); }
 
 // ── Render the live nav bar ──
 function renderNavBar(){
@@ -7609,7 +7653,133 @@ document.addEventListener('DOMContentLoaded', function(){
       console.warn('[MOM] Firebase headcount listener error:', err);
     });
 
-    console.log('[MOM] Firebase real-time listeners attached ✔');
+    // ── Helper: generic listener factory ─────────────────────────
+    // Receives Firebase data, marks key as initialized, stores it
+    // locally, and calls optional renderer(s).
+    function fbListen(path, lsKey, validator, renderers){
+      _fbDb.ref(path).on('value', function(snap){
+        var data = snap.val();
+        if(!validator(data)) {
+          // Nothing in Firebase yet — just mark as initialized so
+          // future local saves will propagate to Firebase.
+          _fbInitialized[lsKey] = true;
+          return;
+        }
+        _fbInitialized[lsKey] = true;
+        try{ localStorage.setItem(lsKey, JSON.stringify(data)); }catch(e){}
+        _memStore[lsKey] = data;
+        if(CU){
+          renderers.forEach(function(fn){
+            if(typeof fn === 'function') try{ fn(); }catch(e){}
+          });
+        }
+      }, function(err){
+        // On permission error still mark initialized so saves work
+        _fbInitialized[lsKey] = true;
+        console.warn('[MOM] Firebase listener error ('+lsKey+'):', err);
+      });
+    }
+
+    // ── 4. User Accounts & Passwords ─────────────────────────────
+    // Password changes made by any super-admin device instantly
+    // propagate to every other device — no more "wrong password" issues.
+    fbListen(
+      FB_ADMINS_PATH, K.admins,
+      function(d){ return Array.isArray(d) && d.length > 0; },
+      [function(){ if(typeof renderUsers==='function') renderUsers(); }]
+    );
+
+    // ── 5. Walawi Service Schedule ────────────────────────────────
+    fbListen(
+      FB_WALAWI_PATH, K.walawi,
+      function(d){ return Array.isArray(d); },
+      [function(){ if(typeof renderW==='function') renderW(); },
+       function(){ if(typeof renderAW==='function') renderAW(); }]
+    );
+
+    // ── 6. Kawaida Service Schedule ───────────────────────────────
+    fbListen(
+      FB_KAWAIDA_PATH, K.kawaida,
+      function(d){ return Array.isArray(d); },
+      [function(){ if(typeof renderK==='function') renderK(); },
+       function(){ if(typeof renderAK==='function') renderAK(); }]
+    );
+
+    // ── 7. Display Settings (font sizes, titles, etc.) ────────────
+    fbListen(
+      FB_SETTINGS_PATH, K.settings,
+      function(d){ return d && typeof d === 'object' && !Array.isArray(d); },
+      [function(){ if(typeof renderDisplaySettings==='function') renderDisplaySettings(); },
+       function(){ if(typeof renderW==='function') renderW(); },
+       function(){ if(typeof renderK==='function') renderK(); },
+       function(){ if(typeof renderNames==='function') renderNames(); }]
+    );
+
+    // ── 8. Column Headers ─────────────────────────────────────────
+    fbListen(
+      FB_HEADERS_PATH, K.headers,
+      function(d){ return d && typeof d === 'object' && !Array.isArray(d); },
+      [function(){ if(typeof renderW==='function') renderW(); },
+       function(){ if(typeof renderK==='function') renderK(); }]
+    );
+
+    // ── 9. Navigation Menus ───────────────────────────────────────
+    fbListen(
+      FB_MENUS_PATH, K_MENUS,
+      function(d){ return Array.isArray(d) && d.length > 0; },
+      [function(){ if(typeof renderNavBar==='function') renderNavBar(); }]
+    );
+
+    // ── 10. Custom Windows ────────────────────────────────────────
+    fbListen(
+      FB_WINDOWS_PATH, K_WINDOWS,
+      function(d){ return Array.isArray(d); },
+      [function(){ if(typeof renderNavBar==='function') renderNavBar(); }]
+    );
+
+    // ── 11. Departments ───────────────────────────────────────────
+    fbListen(
+      FB_DEPTS_PATH, K.depts,
+      function(d){ return d && typeof d === 'object'; },
+      []
+    );
+
+    // ── 12. Sub-Departments ───────────────────────────────────────
+    fbListen(
+      FB_SUBDEPTS_PATH, K.subDepts,
+      function(d){ return d && typeof d === 'object'; },
+      []
+    );
+
+    // ── 13. Wasimamizi — Sunday schedule ─────────────────────────
+    fbListen(
+      FB_WASIM_SUN_PATH, K_WASIM_SUN,
+      function(d){ return Array.isArray(d); },
+      [function(){ if(typeof renderWasimSchedule==='function') renderWasimSchedule('sun'); }]
+    );
+
+    // ── 14. Wasimamizi — Saturday schedule ───────────────────────
+    fbListen(
+      FB_WASIM_SAT_PATH, K_WASIM_SAT,
+      function(d){ return Array.isArray(d); },
+      [function(){ if(typeof renderWasimSchedule==='function') renderWasimSchedule('sat'); }]
+    );
+
+    // ── 15. Wasimamizi access permissions ─────────────────────────
+    fbListen(
+      FB_WASIM_ACC_PATH, K_WASIM_ACCESS,
+      function(d){ return d && typeof d === 'object'; },
+      []
+    );
+
+    // ── 16. Usher schedule ────────────────────────────────────────
+    fbListen(
+      FB_USHER_PATH, K_USHER_SCHED,
+      function(d){ return d && typeof d === 'object'; },
+      [function(){ if(typeof renderUsherSchedule==='function') renderUsherSchedule(); }]
+    );
+
+    console.log('[MOM] Firebase real-time listeners attached ✔ (full two-way sync enabled)');
   }
 
   // Attach immediately if page is already loaded, else wait for DOMContentLoaded
