@@ -2189,6 +2189,9 @@ const FB_WASIM_SUN_PATH = 'mom-ministry/wasimamizi/sunday';
 const FB_WASIM_SAT_PATH = 'mom-ministry/wasimamizi/saturday';
 const FB_WASIM_ACC_PATH = 'mom-ministry/wasimamizi/access';
 const FB_USHER_PATH     = 'mom-ministry/app/usherSched';
+const FB_LOGO_PATH      = 'mom-ministry/branding/logo';
+const FB_LOGO_SIZE_PATH = 'mom-ministry/branding/logoSize';
+const FB_BG_PATH        = 'mom-ministry/branding/background';
 // Firebase objects (initialised below; null if config not yet filled in)
 let _fbApp = null, _fbDb = null;
 (function(){
@@ -2237,6 +2240,9 @@ const _FB_PATHS = {
   [K_WASIM_SAT] : FB_WASIM_SAT_PATH,
   [K_WASIM_ACCESS]: FB_WASIM_ACC_PATH,
   [K_USHER_SCHED] : FB_USHER_PATH,
+  [K_LOGO]        : FB_LOGO_PATH,
+  [K_LOGO_SIZE]   : FB_LOGO_SIZE_PATH,
+  [K_BG]          : FB_BG_PATH,
 };
 
 const DEF_HEADERS = {
@@ -3734,7 +3740,7 @@ function applyLogoSize(size, save){
   // Update preview size in branding panel
   const preview = document.getElementById('brand-logo-preview');
   if(preview){ preview.style.width = Math.min(size * 2, 120) + 'px'; preview.style.height = Math.min(size * 2, 120) + 'px'; }
-  if(save !== false) try{localStorage.setItem(K_LOGO_SIZE,size);_memStore[K_LOGO_SIZE]=size;}catch(e){_memStore[K_LOGO_SIZE]=size;}
+  if(save !== false) sv(K_LOGO_SIZE, size); // syncs to Firebase
 }
 
 function adjustLogoSize(delta){
@@ -3745,7 +3751,8 @@ function adjustLogoSize(delta){
 function resetLogoSize(){
   applyLogoSize(DEFAULT_LOGO_SIZE);
   _lsDel(K_LOGO_SIZE);
-  showToast('↺ Logo size reset', 'success');
+  if(_fbDb) _fbDb.ref(FB_LOGO_SIZE_PATH).remove().catch(function(e){ console.warn('[MOM] Firebase logo size remove error:',e); });
+  showToast('↺ Logo size reset on all devices', 'success');
 }
 
 function applyLogoToPage(src){
@@ -3813,6 +3820,11 @@ function renderBrandingPanel(){
 
 // ── Logo Upload ──
 function handleLogoUpload(event){
+  // Super Admin only — double-check even if the UI button is already hidden
+  if(!CU || CU.role !== 'super'){
+    showToast('&#128274; Super Admins only can change the logo','error');
+    return;
+  }
   const file = event.target.files[0];
   if(!file) return;
   if(file.size > 2 * 1024 * 1024){
@@ -3822,17 +3834,24 @@ function handleLogoUpload(event){
   const reader = new FileReader();
   reader.onload = function(e){
     const src = e.target.result;
-    try{localStorage.setItem(K_LOGO,src);_memStore[K_LOGO]=src;}catch(e){_memStore[K_LOGO]=src;}
+    sv(K_LOGO, src);          // saves to localStorage AND syncs to Firebase
     applyLogoToPage(src);
     const preview = document.getElementById('brand-logo-preview');
     if(preview) preview.src = src;
-    showToast('&#9989; Logo updated!','success');
+    showToast('&#9989; Logo updated on all devices!','success');
   };
   reader.readAsDataURL(file);
 }
 
 function resetLogo(){
+  // Super Admin only
+  if(!CU || CU.role !== 'super'){
+    showToast('&#128274; Super Admins only can reset the logo','error');
+    return;
+  }
   _lsDel(K_LOGO);
+  // Push null to Firebase so all devices drop the custom logo too
+  if(_fbDb) _fbDb.ref(FB_LOGO_PATH).remove().catch(function(e){ console.warn('[MOM] Firebase logo remove error:',e); });
   // Re-apply original embedded logo
   const el = document.querySelector('.logo-img-lg');
   if(el){
@@ -3843,7 +3862,7 @@ function resetLogo(){
     const preview = document.getElementById('brand-logo-preview');
     if(preview) preview.src = original;
   }
-  showToast('&#8634; Logo reset to default','success');
+  showToast('&#8634; Logo reset to default on all devices','success');
 }
 
 // ── Background Mode ──
@@ -3972,10 +3991,10 @@ function applyBackground(){
       }
     };
   }
-  try{localStorage.setItem(K_BG,JSON.stringify(bgConfig));_memStore[K_BG]=JSON.stringify(bgConfig);}catch(e){_memStore[K_BG]=JSON.stringify(bgConfig);}
+  sv(K_BG, bgConfig); // saves to localStorage AND syncs to Firebase
   applyBgToPage(bgConfig);
   renderBrandingPanel();
-  showToast('&#9989; Background applied!','success');
+  showToast('&#9989; Background applied on all devices!','success');
 }
 
 function resetBackground(){
@@ -4907,7 +4926,8 @@ function renderHeadcount(){
           <span class="hce-total-val" id="hc-total-num-${day.id}">${grand}</span>
         </div>
         <div class="hce-date-wrap">
-          <input type="date" id="hc-date-${day.id}" value="${dt}" class="hce-date-input"/>
+          <input type="date" id="hc-date-${day.id}" value="${dt}" class="hce-date-input"
+            onchange="onHcDateChange('${day.id}', this.value)"/>
         </div>
         <div class="hce-meta">${ts?`👤 ${esc(by)} · ${esc(dt)}`:'No data saved yet'}</div>
       </div>
@@ -5025,6 +5045,84 @@ function recalcHcTotal(dayId){
   const total    = adults + children;
   const numEl = document.getElementById('hc-total-num-'+dayId);
   if(numEl) numEl.textContent = total || 0;
+}
+
+// ── Date-change handler for headcount columns ──────────────────
+// When the usher picks a different date:
+//   • If data was already saved for that date → load it into the fields
+//   • If no data exists for that date        → clear all fields to empty
+function onHcDateChange(dayId, selectedDate){
+  const hcData  = getHeadcountData();
+  const history = hcData._history || [];
+
+  // Helper: set an input's value (show '' for 0/falsy, consistent with initial render)
+  function setField(id, val){
+    const el = document.getElementById(id);
+    if(el) el.value = (val && val !== 0) ? val : '';
+  }
+  // Helper: update the column badge (yellow pill showing total)
+  function updateBadge(total){
+    const col = document.getElementById('hce-col-'+dayId);
+    if(!col) return;
+    let badge = col.querySelector('.hce-col-badge');
+    if(total > 0){
+      if(!badge){
+        badge = document.createElement('span');
+        badge.className = 'hce-col-badge';
+        col.querySelector('.hce-col-header').appendChild(badge);
+      }
+      badge.textContent = total;
+    } else {
+      if(badge) badge.remove();
+    }
+  }
+  // Helper: update the "last saved by" meta line
+  function updateMeta(text){
+    const metaEl = document.querySelector('#hce-col-'+dayId+' .hce-meta');
+    if(metaEl) metaEl.textContent = text;
+  }
+
+  if(!selectedDate){
+    // Date was cleared — wipe the fields
+    ['hce-adultTotal','hce-adultMale','hce-adultFemale',
+     'hce-childTotal','hce-childMale','hce-childFemale'].forEach(function(pfx){
+      const el = document.getElementById(pfx+'-'+dayId);
+      if(el) el.value = '';
+    });
+    const numEl = document.getElementById('hc-total-num-'+dayId);
+    if(numEl) numEl.textContent = '0';
+    updateBadge(0);
+    updateMeta('No data saved yet');
+    return;
+  }
+
+  // Search history (most recent first) for an entry matching this day + date
+  const match = history.find(function(h){ return h.dayId === dayId && h.date === selectedDate; });
+
+  if(match){
+    // ✅ Data exists for this date — populate the fields
+    setField('hce-adultTotal-'+dayId,   match.adults);
+    setField('hce-adultMale-'+dayId,    match.adultMale);
+    setField('hce-adultFemale-'+dayId,  match.adultFemale);
+    setField('hce-childTotal-'+dayId,   match.children);
+    setField('hce-childMale-'+dayId,    match.childMale);
+    setField('hce-childFemale-'+dayId,  match.childFemale);
+    recalcHcTotal(dayId);
+    const total = (match.adults||0) + (match.children||0);
+    updateBadge(total);
+    updateMeta('👤 ' + esc(match.enteredBy||'') + ' · ' + esc(selectedDate));
+  } else {
+    // ❌ No data for this date — clear everything to blank
+    ['hce-adultTotal','hce-adultMale','hce-adultFemale',
+     'hce-childTotal','hce-childMale','hce-childFemale'].forEach(function(pfx){
+      const el = document.getElementById(pfx+'-'+dayId);
+      if(el) el.value = '';
+    });
+    const numEl = document.getElementById('hc-total-num-'+dayId);
+    if(numEl) numEl.textContent = '0';
+    updateBadge(0);
+    updateMeta('No data saved yet');
+  }
 }
 
 function saveAllHcDays(){
@@ -5498,7 +5596,9 @@ function renderHcHistory(){
     }
   }
 
-  // ── SECTION 3: Monthly Breakdown Table ──
+  // ── SECTION 3: Monthly Breakdown Table with per-date detail rows ──
+
+  // Build monthly totals map (for the month summary row)
   const monthlyMap={};
   filtered.forEach(h=>{
     const ym=h.date?.slice(0,7)||'?';
@@ -5509,15 +5609,81 @@ function renderHcHistory(){
     monthlyMap[ym].male    +=(h.adultMale||0)+(h.childMale||0);
     monthlyMap[ym].female  +=(h.adultFemale||0)+(h.childFemale||0);
   });
-  const monthlyKeys=Object.keys(monthlyMap).sort();
 
+  // Build per-month entries (individual date rows), sorted by date asc
+  const monthlyEntries={};
+  filtered.forEach(h=>{
+    const ym=h.date?.slice(0,7)||'?';
+    if(!monthlyEntries[ym]) monthlyEntries[ym]=[];
+    monthlyEntries[ym].push(h);
+  });
+  Object.keys(monthlyEntries).forEach(ym=>{
+    monthlyEntries[ym].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
+  });
+
+  const monthlyKeys=Object.keys(monthlyMap).sort();
   const grandAdults  =monthlyKeys.reduce((s,k)=>s+monthlyMap[k].adults,0);
   const grandChildren=monthlyKeys.reduce((s,k)=>s+monthlyMap[k].children,0);
   const grandTotal   =monthlyKeys.reduce((s,k)=>s+monthlyMap[k].total,0);
 
+  // Helper: format date string "2026-03-09" → "Mar 9, 2026"
+  function fmtDate(ds){
+    if(!ds) return '—';
+    const d=new Date(ds+'T00:00:00');
+    return isNaN(d)?ds:(MONTH_NAMES[d.getMonth()+1]||ds.slice(5,7)).slice(0,3)+' '+d.getDate()+', '+d.getFullYear();
+  }
+  // Day colour accent (matches HC_DAYS colours)
+  const dayAccent={sunday:'#dc2626',saturday:'#1d4ed8',friday:'#7c3aed'};
+
+  // Cell styles
+  const thS='padding:9px 8px;text-align:center;color:white;font-family:\'Cinzel\',serif;font-size:0.65rem;letter-spacing:0.04em;font-weight:800;';
+  const thL='padding:9px 12px;text-align:left;color:white;font-family:\'Cinzel\',serif;font-size:0.65rem;letter-spacing:0.04em;font-weight:800;';
+
+  // Build all rows HTML
+  const bodyRows = monthlyKeys.map((ym,mi)=>{
+    const r   = monthlyMap[ym];
+    const [y,m]=ym.split('-');
+    const mName=(MONTH_NAMES[parseInt(m)]||ym)+' '+y;
+    const entries = monthlyEntries[ym]||[];
+
+    // ── Month summary row ──
+    const monthRow=`<tr style="background:#1e3a8a;">
+      <td colspan="2" style="padding:9px 12px;color:white;font-family:'Cinzel',serif;font-size:0.72rem;font-weight:800;letter-spacing:0.06em;">📅 ${mName.toUpperCase()}</td>
+      <td style="padding:9px 8px;text-align:center;color:#93c5fd;font-weight:800;font-size:0.78rem;">${r.adults}</td>
+      <td style="padding:9px 8px;text-align:center;color:#93c5fd;font-weight:800;font-size:0.78rem;">${r.children}</td>
+      <td style="padding:9px 8px;text-align:center;color:#bfdbfe;font-weight:700;font-size:0.78rem;">${r.male||'—'}</td>
+      <td style="padding:9px 8px;text-align:center;color:#bfdbfe;font-weight:700;font-size:0.78rem;">${r.female||'—'}</td>
+      <td style="padding:9px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-size:0.85rem;font-weight:800;">${r.total}</td>
+    </tr>`;
+
+    // ── Individual date rows ──
+    const detailRows = entries.map((h,ei)=>{
+      const accent  = dayAccent[h.dayId]||'#475569';
+      const dayLbl  = h.dayLabel||(h.dayId?h.dayId.charAt(0).toUpperCase()+h.dayId.slice(1):'—');
+      const male    = (h.adultMale||0)+(h.childMale||0);
+      const female  = (h.adultFemale||0)+(h.childFemale||0);
+      const rowBg   = ei%2===0?'#f8faff':'white';
+      return `<tr style="background:${rowBg};border-bottom:1px solid #e2e8f0;">
+        <td style="padding:8px 6px 8px 22px;font-size:0.75rem;font-weight:700;color:#0f172a;white-space:nowrap;">
+          <span style="display:inline-block;width:3px;height:28px;background:${accent};border-radius:3px;vertical-align:middle;margin-right:8px;"></span>${fmtDate(h.date)}
+        </td>
+        <td style="padding:8px 6px;text-align:center;">
+          <span style="display:inline-block;background:${accent};color:white;font-size:0.6rem;font-weight:800;padding:2px 7px;border-radius:20px;white-space:nowrap;">${dayLbl}</span>
+        </td>
+        <td style="padding:8px 6px;text-align:center;color:#1e40af;font-weight:800;font-size:0.8rem;">${h.adults||0}</td>
+        <td style="padding:8px 6px;text-align:center;color:#1e40af;font-weight:800;font-size:0.8rem;">${h.children||0}</td>
+        <td style="padding:8px 6px;text-align:center;color:#475569;font-weight:700;font-size:0.78rem;">${male||'—'}</td>
+        <td style="padding:8px 6px;text-align:center;color:#475569;font-weight:700;font-size:0.78rem;">${female||'—'}</td>
+        <td style="padding:8px 6px;text-align:center;font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;color:#0a1f5c;">${h.total||0}</td>
+      </tr>`;
+    }).join('');
+
+    return monthRow + detailRows;
+  }).join('');
+
   if(list){
     list.innerHTML = monthlyKeys.length ? `
-    <div style="background:white;border:2px solid #e2e8f0;border-radius:14px;overflow:hidden;">
+    <div style="background:white;border:2px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-top:4px;">
       <div style="background:linear-gradient(135deg,#0a1f5c,#1e40af);padding:12px;text-align:center;">
         <span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:white;">Monthly </span><span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:#fde047;">Breakdown</span>
       </div>
@@ -5525,38 +5691,24 @@ function renderHcHistory(){
         <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
           <thead>
             <tr style="background:#1e40af;">
-              <th style="padding:10px 12px;text-align:left;color:white;font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.04em;font-weight:800;">Month</th>
-              <th style="padding:10px 8px;text-align:center;color:white;font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.04em;font-weight:800;">Adults</th>
-              <th style="padding:10px 8px;text-align:center;color:white;font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.04em;font-weight:800;">Children</th>
-              <th style="padding:10px 8px;text-align:center;color:white;font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.04em;font-weight:800;">Male</th>
-              <th style="padding:10px 8px;text-align:center;color:white;font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.04em;font-weight:800;">Female</th>
-              <th style="padding:10px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-size:0.7rem;letter-spacing:0.04em;font-weight:800;">Total</th>
+              <th style="${thL}">Date</th>
+              <th style="${thS}">Day</th>
+              <th style="${thS}">Adults</th>
+              <th style="${thS}">Children</th>
+              <th style="${thS}">Male</th>
+              <th style="${thS}">Female</th>
+              <th style="padding:9px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-size:0.65rem;letter-spacing:0.04em;font-weight:800;">Total</th>
             </tr>
           </thead>
-          <tbody>
-            ${monthlyKeys.map((ym,i)=>{
-              const r=monthlyMap[ym];
-              const [y,m]=ym.split('-');
-              const mName=(MONTH_NAMES[parseInt(m)]||ym)+' '+y;
-              const bg=i%2===0?'white':'#f8fafc';
-              return `<tr style="background:${bg};border-bottom:1px solid #e2e8f0;">
-                <td style="padding:10px 12px;font-weight:700;color:#0a1f5c;">${mName}</td>
-                <td style="padding:10px 8px;text-align:center;color:#1e40af;font-weight:800;">${r.adults}</td>
-                <td style="padding:10px 8px;text-align:center;color:#1e40af;font-weight:800;">${r.children}</td>
-                <td style="padding:10px 8px;text-align:center;color:#475569;font-weight:700;">${r.male||'—'}</td>
-                <td style="padding:10px 8px;text-align:center;color:#475569;font-weight:700;">${r.female||'—'}</td>
-                <td style="padding:10px 8px;text-align:center;font-family:'Cinzel',serif;font-size:0.9rem;font-weight:800;color:#0a1f5c;">${r.total}</td>
-              </tr>`;
-            }).join('')}
-          </tbody>
+          <tbody>${bodyRows}</tbody>
           <tfoot>
             <tr style="background:#0a1f5c;">
-              <td style="padding:10px 12px;color:white;font-family:'Cinzel',serif;font-size:0.72rem;font-weight:800;letter-spacing:0.04em;">GRAND TOTAL</td>
-              <td style="padding:10px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-weight:800;">${grandAdults}</td>
-              <td style="padding:10px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-weight:800;">${grandChildren}</td>
-              <td style="padding:10px 8px;text-align:center;color:rgba(255,255,255,0.6);font-weight:700;">—</td>
-              <td style="padding:10px 8px;text-align:center;color:rgba(255,255,255,0.6);font-weight:700;">—</td>
-              <td style="padding:10px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-size:1rem;font-weight:800;">${grandTotal}</td>
+              <td colspan="2" style="padding:11px 12px;color:white;font-family:'Cinzel',serif;font-size:0.72rem;font-weight:800;letter-spacing:0.05em;">GRAND TOTAL</td>
+              <td style="padding:11px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-weight:800;">${grandAdults}</td>
+              <td style="padding:11px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-weight:800;">${grandChildren}</td>
+              <td style="padding:11px 8px;text-align:center;color:rgba(255,255,255,0.5);font-weight:700;">—</td>
+              <td style="padding:11px 8px;text-align:center;color:rgba(255,255,255,0.5);font-weight:700;">—</td>
+              <td style="padding:11px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-size:1rem;font-weight:800;">${grandTotal}</td>
             </tr>
           </tfoot>
         </table>
@@ -7778,6 +7930,67 @@ document.addEventListener('DOMContentLoaded', function(){
       function(d){ return d && typeof d === 'object'; },
       [function(){ if(typeof renderUsherSchedule==='function') renderUsherSchedule(); }]
     );
+
+    // ── 17. Logo (Super Admin only — broadcast to all devices) ────
+    // When a Super Admin changes the logo on their device, every
+    // other open device receives the new logo instantly.
+    _fbDb.ref(FB_LOGO_PATH).on('value', function(snap){
+      var src = snap.val();
+      _fbInitialized[K_LOGO] = true;
+      if(src && typeof src === 'string'){
+        try{ localStorage.setItem(K_LOGO, JSON.stringify(src)); }catch(e){}
+        _memStore[K_LOGO] = src;
+        applyLogoToPage(src);
+        if(CU && typeof renderBrandingPanel === 'function'){
+          var preview = document.getElementById('brand-logo-preview');
+          if(preview) preview.src = src;
+        }
+      } else {
+        // null means logo was reset — restore the default embedded logo
+        _lsDel(K_LOGO);
+        var el = document.querySelector('.logo-img-lg');
+        if(el){
+          var original = el.getAttribute('data-original-src') || el.src;
+          document.querySelectorAll('.logo-img-lg, .logo-img-sm').forEach(function(img){ img.src = original; });
+          var preview = document.getElementById('brand-logo-preview');
+          if(preview) preview.src = original;
+        }
+      }
+    }, function(err){
+      _fbInitialized[K_LOGO] = true;
+      console.warn('[MOM] Firebase logo listener error:', err);
+    });
+
+    // ── 18. Logo size ─────────────────────────────────────────────
+    _fbDb.ref(FB_LOGO_SIZE_PATH).on('value', function(snap){
+      var size = snap.val();
+      _fbInitialized[K_LOGO_SIZE] = true;
+      if(size && typeof size === 'number'){
+        try{ localStorage.setItem(K_LOGO_SIZE, JSON.stringify(size)); }catch(e){}
+        _memStore[K_LOGO_SIZE] = size;
+        if(typeof applyLogoSize === 'function') applyLogoSize(size, false);
+      } else {
+        _lsDel(K_LOGO_SIZE);
+        if(typeof applyLogoSize === 'function') applyLogoSize(34, false);
+      }
+    }, function(err){
+      _fbInitialized[K_LOGO_SIZE] = true;
+      console.warn('[MOM] Firebase logo size listener error:', err);
+    });
+
+    // ── 19. Background ────────────────────────────────────────────
+    _fbDb.ref(FB_BG_PATH).on('value', function(snap){
+      var bgConfig = snap.val();
+      _fbInitialized[K_BG] = true;
+      if(bgConfig && typeof bgConfig === 'object'){
+        try{ localStorage.setItem(K_BG, JSON.stringify(bgConfig)); }catch(e){}
+        _memStore[K_BG] = bgConfig;
+        if(typeof applyBgToPage === 'function') applyBgToPage(bgConfig);
+      }
+    }, function(err){
+      _fbInitialized[K_BG] = true;
+      console.warn('[MOM] Firebase background listener error:', err);
+    });
 
     console.log('[MOM] Firebase real-time listeners attached ✔ (full two-way sync enabled)');
   }
