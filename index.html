@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -5017,7 +5019,7 @@ function renderFinanceRecordsDetail(folder){
               style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
           </div>
           <div>
-            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Amount (TZS) / Kiasi</label>
+            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Amount ($)</label>
             <input type="number" id="fin-form-amount" min="0" placeholder="0"
               style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
           </div>
@@ -5075,7 +5077,7 @@ function renderFinanceRecordsDetail(folder){
     </div>` : `
     <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
       <span style="font-size:0.72rem;color:var(--text-light);">${sorted.length} entr${sorted.length===1?'y':'ies'}</span>
-      <span style="font-size:0.8rem;font-weight:800;color:${darkColor};">Total: TZS ${totalAmt.toLocaleString()}</span>
+      <span style="font-size:0.8rem;font-weight:800;color:${darkColor};">Total: $${totalAmt.toLocaleString()}</span>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;">
       ${sorted.map(e => {
@@ -5087,7 +5089,7 @@ function renderFinanceRecordsDetail(folder){
           <div style="width:4px;min-height:40px;border-radius:3px;background:${accentColor};flex-shrink:0;margin-top:2px;"></div>
           <div style="flex:1;min-width:0;">
             <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
-              <span style="font-weight:800;font-size:0.88rem;color:${darkColor};">TZS ${(parseFloat(e.amount)||0).toLocaleString()}</span>
+              <span style="font-weight:800;font-size:0.88rem;color:${darkColor};">$${(parseFloat(e.amount)||0).toLocaleString()}</span>
               <span style="font-size:0.7rem;color:var(--text-light);">${e.date||''}</span>
             </div>
             ${isExpenses
@@ -5144,136 +5146,280 @@ function deleteFinanceEntry(folder, entryId){
 
 // ── Finance Count / Hesabu ──
 
-const FIN_DENOMS = [
-  {val:10000, label:'10,000'},
-  {val:5000,  label:'5,000'},
-  {val:2000,  label:'2,000'},
-  {val:1000,  label:'1,000'},
-  {val:500,   label:'500'},
-  {val:200,   label:'200'},
-  {val:100,   label:'100'},
-  {val:50,    label:'50'},
+// All values stored in CENTS to avoid floating-point rounding issues.
+// Bills: $100=10000¢, $50=5000¢, $20=2000¢, $10=1000¢, $5=500¢, $1=100¢
+// Coins: Quarter=25¢, Dime=10¢, Nickel=5¢, Penny=1¢
+const FIN_BILLS = [
+  {id:'b100', val:10000, label:'$100 Bills'},
+  {id:'b50',  val:5000,  label:'$50 Bills'},
+  {id:'b20',  val:2000,  label:'$20 Bills'},
+  {id:'b10',  val:1000,  label:'$10 Bills'},
+  {id:'b5',   val:500,   label:'$5 Bills'},
+  {id:'b1',   val:100,   label:'$1 Bills'},
 ];
+const FIN_COINS = [
+  {id:'cq', val:25, label:'Quarters', cent:'25¢', portrait:'George Washington',  coinColor:'#C8C8C8', textColor:'#555'},
+  {id:'cd', val:10, label:'Dimes',    cent:'10¢', portrait:'Franklin D. Roosevelt', coinColor:'#C8C8C8', textColor:'#555'},
+  {id:'cn', val:5,  label:'Nickels',  cent:'5¢',  portrait:'Thomas Jefferson',   coinColor:'#B0B0A0', textColor:'#555'},
+  {id:'cp', val:1,  label:'Pennies',  cent:'1¢',  portrait:'Abraham Lincoln',    coinColor:'#B87333', textColor:'#fff'},
+];
+// Combined — used where a single loop over all denominations is needed
+const FIN_DENOMS = [...FIN_BILLS, ...FIN_COINS];
+// Format cents as USD string: 10025 → "$100.25"
+function fmtUSD(cents){ return '$'+(cents/100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+
+// Teal colour to match the Cash Count Sheet image
+const _TEAL = '#6dbfbf';
+const _TEAL_DARK = '#2a8f8f';
+const _TEAL_LIGHT = '#e0f5f5';
 
 function renderFinanceCountDept(){
   const canEdit = isFinanceEditor();
+  const today   = new Date().toISOString().slice(0,10);
+  const userName = CU ? CU.displayName || CU.username : '';
+
+  // Standard row builder (bills)
+  const row = (d) => `
+    <tr style="border-bottom:1px solid #d1d5db;">
+      <td style="padding:9px 12px;font-family:'Nunito',sans-serif;font-size:0.82rem;color:#374151;border-right:1px solid #d1d5db;">${d.label}</td>
+      <td style="padding:5px 8px;text-align:center;border-right:1px solid #d1d5db;">
+        <input type="number" id="fin-cnt-${d.id}" min="0" value=""
+          placeholder="0"
+          oninput="updateFinCountTotal()"
+          style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;
+                 font-size:0.82rem;text-align:center;font-family:'Nunito',sans-serif;
+                 background:white;box-sizing:border-box;">
+      </td>
+      <td id="fin-sub-${d.id}" style="padding:9px 12px;text-align:right;font-weight:700;
+          font-family:'Nunito',sans-serif;font-size:0.82rem;color:#374151;min-width:90px;">—</td>
+    </tr>`;
+
+  // Coin row builder — shows coin circle icon + name + portrait underneath
+  const coinRow = (d) => `
+    <tr style="border-bottom:1px solid #d1d5db;">
+      <td style="padding:8px 12px;border-right:1px solid #d1d5db;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <!-- Coin circle -->
+          <div style="
+            width:36px;height:36px;border-radius:50%;flex-shrink:0;
+            background:radial-gradient(circle at 35% 35%, ${d.coinColor === '#B87333' ? '#d4884a' : '#e0e0e0'}, ${d.coinColor});
+            border:2px solid ${d.coinColor === '#B87333' ? '#8B5A2B' : '#9e9e9e'};
+            display:flex;align-items:center;justify-content:center;
+            box-shadow:1px 2px 4px rgba(0,0,0,0.25);
+            font-family:'Cinzel',serif;font-size:0.62rem;font-weight:800;
+            color:${d.textColor};letter-spacing:0;">
+            ${d.cent}
+          </div>
+          <!-- Label + portrait -->
+          <div>
+            <div style="font-family:'Nunito',sans-serif;font-size:0.83rem;font-weight:800;color:#374151;">${d.label}</div>
+            <div style="font-family:'Nunito',sans-serif;font-size:0.65rem;color:#9ca3af;margin-top:1px;">${d.portrait}</div>
+          </div>
+        </div>
+      </td>
+      <td style="padding:5px 8px;text-align:center;border-right:1px solid #d1d5db;">
+        <input type="number" id="fin-cnt-${d.id}" min="0" value=""
+          placeholder="0"
+          oninput="updateFinCountTotal()"
+          style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;
+                 font-size:0.82rem;text-align:center;font-family:'Nunito',sans-serif;
+                 background:white;box-sizing:border-box;">
+      </td>
+      <td id="fin-sub-${d.id}" style="padding:9px 12px;text-align:right;font-weight:700;
+          font-family:'Nunito',sans-serif;font-size:0.82rem;color:#374151;min-width:90px;">—</td>
+    </tr>`;
+
+  // Section header row
+  const sectionHdr = (label) => `
+    <tr>
+      <td colspan="3" style="background:${_TEAL};padding:9px 12px;
+          font-family:'Cinzel',serif;font-size:0.8rem;font-weight:800;
+          color:white;letter-spacing:0.06em;">${label}</td>
+    </tr>`;
+
+  // Subtotal row
+  const subtotalRow = (id, label) => `
+    <tr style="background:#f9f9f9;border-top:2px solid ${_TEAL};">
+      <td colspan="2" style="padding:9px 12px;font-family:'Nunito',sans-serif;
+          font-size:0.82rem;font-weight:800;color:#374151;border-right:1px solid #d1d5db;">${label}</td>
+      <td id="${id}" style="padding:9px 12px;text-align:right;font-weight:800;
+          font-family:'Nunito',sans-serif;font-size:0.82rem;color:${_TEAL_DARK};">0</td>
+    </tr>`;
+
   document.getElementById('dept-detail-body').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:14px;">
-      <div style="background:#f8faff;border:1.5px solid #c7d2fe;border-radius:12px;padding:14px;">
-        <div style="font-family:'Cinzel',serif;font-size:0.78rem;font-weight:800;color:#1e40af;margin-bottom:10px;">🧮 Denomination Count Sheet</div>
-        <table style="width:100%;border-collapse:collapse;font-family:'Nunito',sans-serif;font-size:0.82rem;">
+
+      <!-- Cash Count Card -->
+      <div style="background:white;border:1.5px solid #c8e6e6;border-radius:14px;overflow:hidden;
+                  box-shadow:0 3px 12px rgba(109,191,191,0.18);">
+
+        <!-- Card Header -->
+        <div style="background:white;padding:16px 18px 10px;text-align:center;border-bottom:2px solid ${_TEAL};">
+          <div style="font-size:1.8rem;margin-bottom:4px;">💰</div>
+          <div style="font-family:'Cinzel',serif;font-size:1.05rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.08em;">Cash Count</div>
+          <div style="font-size:0.7rem;color:var(--text-light);font-family:'Nunito',sans-serif;margin-top:2px;">Hesabu ya Pesa</div>
+        </div>
+
+        <!-- Date / Name / Service row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px;background:#f8fefe;border-bottom:1px solid #d9eeee;">
+          <div>
+            <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">DATE / Tarehe</label>
+            <input type="date" id="fin-cnt-date" value="${today}"
+              style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
+                     font-size:0.82rem;font-family:'Nunito',sans-serif;box-sizing:border-box;
+                     background:white;color:#374151;">
+          </div>
+          <div>
+            <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">NAME / Jina</label>
+            <input type="text" id="fin-cnt-name" value="${userName}" placeholder="Counter name..."
+              style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
+                     font-size:0.82rem;font-family:'Nunito',sans-serif;box-sizing:border-box;
+                     background:white;color:#374151;">
+          </div>
+        </div>
+        <div style="padding:8px 14px 12px;background:#f8fefe;border-bottom:1px solid #d9eeee;">
+          <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">SERVICE / Ibada</label>
+          <select id="fin-cnt-service"
+            style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
+                   font-size:0.82rem;font-family:'Nunito',sans-serif;background:white;color:#374151;">
+            <option value="Sunday Service">Sunday Service / Ibada ya Jumapili</option>
+            <option value="Saturday Service">Saturday Service / Ibada ya Jumamosi</option>
+            <option value="Friday Service">Friday Service / Ibada ya Ijumaa</option>
+            <option value="Special Service">Special Service / Ibada Maalum</option>
+            <option value="Tithe">Tithe / Zaka</option>
+          </select>
+        </div>
+
+        <!-- Table -->
+        <table style="width:100%;border-collapse:collapse;">
+          <!-- Column headers -->
           <thead>
-            <tr style="background:#e0e7ff;">
-              <th style="padding:8px 10px;text-align:left;border-radius:8px 0 0 0;font-weight:800;color:#1e40af;">Denom (TZS)</th>
-              <th style="padding:8px 10px;text-align:center;font-weight:800;color:#1e40af;">Count #</th>
-              <th style="padding:8px 10px;text-align:right;border-radius:0 8px 0 0;font-weight:800;color:#1e40af;">Sub-total</th>
+            <tr style="background:${_TEAL};">
+              <th style="padding:10px 12px;text-align:left;font-family:'Cinzel',serif;font-size:0.75rem;
+                         font-weight:800;color:white;letter-spacing:0.06em;border-right:1px solid rgba(255,255,255,0.3);">DENOMINATION</th>
+              <th style="padding:10px 12px;text-align:center;font-family:'Cinzel',serif;font-size:0.75rem;
+                         font-weight:800;color:white;letter-spacing:0.06em;border-right:1px solid rgba(255,255,255,0.3);width:110px;">QUANTITY</th>
+              <th style="padding:10px 12px;text-align:right;font-family:'Cinzel',serif;font-size:0.75rem;
+                         font-weight:800;color:white;letter-spacing:0.06em;width:110px;">TOTAL</th>
             </tr>
           </thead>
           <tbody>
-            ${FIN_DENOMS.map(d=>`
-            <tr style="border-bottom:1px solid #e5e7eb;">
-              <td style="padding:8px 10px;font-weight:700;color:#374151;">${d.label}</td>
-              <td style="padding:6px 8px;text-align:center;">
-                <input type="number" id="fin-cnt-${d.val}" min="0" value="0"
-                  oninput="updateFinCountTotal()"
-                  style="width:70px;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:0.82rem;text-align:center;font-family:'Nunito',sans-serif;background:white;">
-              </td>
-              <td id="fin-sub-${d.val}" style="padding:8px 10px;text-align:right;font-weight:700;color:#374151;">0</td>
-            </tr>`).join('')}
+            <!-- Bills / Noti -->
+            ${sectionHdr('💵 BILLS')}
+            ${FIN_BILLS.map(d => row(d)).join('')}
+            ${subtotalRow('fin-bills-subtotal','Bills Sub-total')}
+
+            <!-- Coins -->
+            ${sectionHdr('🪙 COINS')}
+            ${FIN_COINS.map(d => coinRow(d)).join('')}
+            ${subtotalRow('fin-coins-subtotal','Coins Sub-total')}
           </tbody>
           <tfoot>
-            <tr style="background:#e0e7ff;">
-              <td colspan="2" style="padding:10px;font-family:'Cinzel',serif;font-weight:800;color:#1e40af;">TOTAL</td>
-              <td id="fin-count-grand-total" style="padding:10px;text-align:right;font-family:'Cinzel',serif;font-size:1rem;font-weight:800;color:#1e40af;">0</td>
+            <tr style="background:${_TEAL};">
+              <td colspan="2" style="padding:12px 14px;font-family:'Cinzel',serif;font-size:0.88rem;
+                  font-weight:800;color:white;letter-spacing:0.08em;">GRAND TOTAL / JUMLA KUBWA</td>
+              <td id="fin-count-grand-total" style="padding:12px 14px;text-align:right;
+                  font-family:'Cinzel',serif;font-size:1rem;font-weight:800;color:white;">0</td>
             </tr>
           </tfoot>
         </table>
-      </div>
-      ${canEdit ? `
-      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px;">
-        <div style="font-family:'Cinzel',serif;font-size:0.78rem;font-weight:800;color:#15803d;margin-bottom:10px;">💾 Save Count as Offering Record</div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
-          <div>
-            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Date / Tarehe</label>
-            <input type="date" id="fin-cnt-date" value="${new Date().toISOString().slice(0,10)}"
-              style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
-          </div>
-          <div>
-            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Service / Ibada</label>
-            <select id="fin-cnt-service" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;font-family:'Nunito',sans-serif;">
-              <option value="Sunday Service">Sunday Service</option>
-              <option value="Saturday Service">Saturday Service</option>
-              <option value="Friday Service">Friday Service</option>
-              <option value="Special Service">Special Service</option>
-              <option value="Tithe">Tithe / Zaka</option>
-            </select>
-          </div>
-        </div>
-        <div style="margin-bottom:8px;">
-          <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Notes (optional)</label>
+
+        <!-- Notes -->
+        <div style="padding:12px 14px;border-top:1px solid #d9eeee;">
+          <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">Notes (optional)</label>
           <input type="text" id="fin-cnt-notes" placeholder="Optional notes..."
-            style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
+            style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
+                   font-size:0.82rem;font-family:'Nunito',sans-serif;box-sizing:border-box;background:white;">
         </div>
-        <button onclick="saveCountAsOffering()" style="
-          padding:10px 18px;background:linear-gradient(135deg,#059669,#065f46);
-          color:white;border:none;border-radius:10px;
-          font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;cursor:pointer;
-          letter-spacing:0.04em;box-shadow:0 3px 10px rgba(0,0,0,0.15);">
-          Save to Offering Records / Hifadhi
-        </button>
-      </div>` : ''}
-      <button onclick="resetFinCountSheet()" style="
-        padding:9px 16px;background:#f3f4f6;color:#374151;
-        border:1.5px solid #d1d5db;border-radius:10px;
-        font-family:'Nunito',sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer;">
-        🔄 Reset Sheet / Futa
-      </button>
+
+        <!-- Action buttons -->
+        <div style="padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid #d9eeee;">
+          ${canEdit ? `
+          <button onclick="saveCountAsOffering()" style="
+            flex:1;padding:12px 16px;
+            background:linear-gradient(135deg,${_TEAL},${_TEAL_DARK});
+            color:white;border:none;border-radius:10px;cursor:pointer;
+            font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;
+            letter-spacing:0.04em;box-shadow:0 3px 12px rgba(42,143,143,0.3);">
+            ✅ Submit &amp; Save to Offering
+          </button>` : ''}
+          <button onclick="resetFinCountSheet()" style="
+            padding:12px 16px;background:#f3f4f6;color:#6b7280;
+            border:1.5px solid #d1d5db;border-radius:10px;cursor:pointer;
+            font-family:'Nunito',sans-serif;font-size:0.8rem;font-weight:700;">
+            🔄 Reset
+          </button>
+        </div>
+      </div>
     </div>`;
 }
 
 function updateFinCountTotal(){
-  let grand = 0;
-  FIN_DENOMS.forEach(function(d){
-    const cnt = parseInt(document.getElementById('fin-cnt-'+d.val)?.value) || 0;
+  let billsCents = 0, coinsCents = 0;
+
+  FIN_BILLS.forEach(function(d){
+    const cnt = parseInt(document.getElementById('fin-cnt-'+d.id)?.value) || 0;
     const sub = cnt * d.val;
-    grand += sub;
-    const el = document.getElementById('fin-sub-'+d.val);
-    if(el) el.textContent = sub > 0 ? sub.toLocaleString() : '0';
+    billsCents += sub;
+    const el = document.getElementById('fin-sub-'+d.id);
+    if(el) el.textContent = sub > 0 ? fmtUSD(sub) : '—';
   });
+
+  FIN_COINS.forEach(function(d){
+    const cnt = parseInt(document.getElementById('fin-cnt-'+d.id)?.value) || 0;
+    const sub = cnt * d.val;
+    coinsCents += sub;
+    const el = document.getElementById('fin-sub-'+d.id);
+    if(el) el.textContent = sub > 0 ? fmtUSD(sub) : '—';
+  });
+
+  const grandCents = billsCents + coinsCents;
+  const bst = document.getElementById('fin-bills-subtotal');
+  if(bst) bst.textContent = billsCents > 0 ? fmtUSD(billsCents) : '$0.00';
+  const cst = document.getElementById('fin-coins-subtotal');
+  if(cst) cst.textContent = coinsCents > 0 ? fmtUSD(coinsCents) : '$0.00';
   const gt = document.getElementById('fin-count-grand-total');
-  if(gt) gt.textContent = grand.toLocaleString();
+  if(gt) gt.textContent = grandCents > 0 ? fmtUSD(grandCents) : '$0.00';
 }
 
 function resetFinCountSheet(){
   FIN_DENOMS.forEach(function(d){
-    const inp = document.getElementById('fin-cnt-'+d.val);
-    if(inp) inp.value = 0;
-    const sub = document.getElementById('fin-sub-'+d.val);
-    if(sub) sub.textContent = '0';
+    const inp = document.getElementById('fin-cnt-'+d.id);
+    if(inp){ inp.value = ''; }
+    const sub = document.getElementById('fin-sub-'+d.id);
+    if(sub) sub.textContent = '—';
   });
-  const gt = document.getElementById('fin-count-grand-total');
-  if(gt) gt.textContent = '0';
+  const bst = document.getElementById('fin-bills-subtotal');  if(bst) bst.textContent = '$0.00';
+  const cst = document.getElementById('fin-coins-subtotal');  if(cst) cst.textContent = '$0.00';
+  const gt  = document.getElementById('fin-count-grand-total'); if(gt) gt.textContent = '$0.00';
 }
 
 function saveCountAsOffering(){
-  let grand = 0;
+  // Sum in cents, then convert to dollars for storage
+  let grandCents = 0;
   FIN_DENOMS.forEach(function(d){
-    grand += (parseInt(document.getElementById('fin-cnt-'+d.val)?.value)||0) * d.val;
+    grandCents += (parseInt(document.getElementById('fin-cnt-'+d.id)?.value)||0) * d.val;
   });
-  if(grand <= 0){ showToast('⚠️ Total is 0. Enter counts first.','error'); return; }
-  const dateVal = document.getElementById('fin-cnt-date')?.value || new Date().toISOString().slice(0,10);
+  if(grandCents <= 0){ showToast('⚠️ Total is $0.00. Enter counts first.','error'); return; }
+  const grandDollars = grandCents / 100;
+  const dateVal = document.getElementById('fin-cnt-date')?.value  || new Date().toISOString().slice(0,10);
   const service = document.getElementById('fin-cnt-service')?.value || 'Sunday Service';
+  const name    = document.getElementById('fin-cnt-name')?.value.trim() || (CU ? CU.displayName||CU.username : 'unknown');
   const notes   = document.getElementById('fin-cnt-notes')?.value.trim() || '';
   const entry = {
-    id: 'off_' + Date.now(), date: dateVal, amount: grand, service: service,
+    id: 'off_' + Date.now(),
+    date: dateVal,
+    amount: grandDollars,
+    service: service,
     notes: notes ? notes + ' [count sheet]' : '[count sheet]',
-    enteredBy: CU ? CU.displayName || CU.username : 'unknown',
+    enteredBy: name,
     timestamp: Date.now()
   };
   const arr = getFinanceOfferings();
   arr.unshift(entry);
   saveFinanceOfferings(arr);
-  showToast('✅ Count saved to Offering Records! TZS ' + grand.toLocaleString(),'success');
+  showToast('✅ Saved to Offering Records! ' + fmtUSD(grandCents),'success');
+  resetFinCountSheet();
 }
 
 // ═══════════════════════════════════════════════════════════════
