@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -2190,6 +2192,8 @@ const FB_USHER_PATH     = 'mom-ministry/app/usherSched';
 const FB_LOGO_PATH      = 'mom-ministry/branding/logo';
 const FB_LOGO_SIZE_PATH = 'mom-ministry/branding/logoSize';
 const FB_BG_PATH        = 'mom-ministry/branding/background';
+const FB_FIN_EXPENSES_PATH = 'mom-ministry/finance/expenses';
+const FB_FIN_OFFERINGS_PATH= 'mom-ministry/finance/offerings';
 // Firebase objects (initialised below; null if config not yet filled in)
 let _fbApp = null, _fbDb = null;
 (function(){
@@ -2217,6 +2221,8 @@ const K_WASIM_SUN    = 'mom_wasim_sun_v1';
 const K_WASIM_SAT    = 'mom_wasim_sat_v1';
 const K_WASIM_ACCESS = 'mom_wasim_access_v2';
 const K_WIN_OVERRIDES= 'mom_win_overrides_v1';
+const K_FIN_EXPENSES = 'mom_fin_expenses_v1';
+const K_FIN_OFFERINGS= 'mom_fin_offerings_v1';
 
 // ── Firebase two-way sync map ──────────────────────────────────
 // Keys listed here are written to Firebase whenever sv() is called
@@ -2241,6 +2247,8 @@ const _FB_PATHS = {
   [K_LOGO]        : FB_LOGO_PATH,
   [K_LOGO_SIZE]   : FB_LOGO_SIZE_PATH,
   [K_BG]          : FB_BG_PATH,
+  [K_FIN_EXPENSES] : FB_FIN_EXPENSES_PATH,
+  [K_FIN_OFFERINGS]: FB_FIN_OFFERINGS_PATH,
 };
 
 const DEF_HEADERS = {
@@ -4444,6 +4452,8 @@ function openDept(deptId){
         </button>
         ${scheduleBtn}
       </div>`;
+  } else if(deptId === 'financial'){
+    openFinanceDept();
   } else {
     const def = getDeptDefs().find(x=>x.id===deptId);
     document.getElementById('dept-detail-body').innerHTML = `
@@ -4847,6 +4857,412 @@ function saveHeadcountData(d){
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ── FINANCE (under Financial Department) ────────────────────────
+// ═══════════════════════════════════════════════════════════════
+
+function getFinanceExpenses(){ return ld(K_FIN_EXPENSES, []); }
+function getFinanceOfferings(){ return ld(K_FIN_OFFERINGS, []); }
+function saveFinanceExpenses(arr){ sv(K_FIN_EXPENSES, arr); }
+function saveFinanceOfferings(arr){ sv(K_FIN_OFFERINGS, arr); }
+
+function isFinanceEditor(){
+  if(!CU) return false;
+  return CU.role === 'super' || CU.role === 'admin';
+}
+
+// ── Finance dept landing — called from openDept('financial') ──
+
+function openFinanceDept(){
+  document.getElementById('dept-detail-name').textContent = 'Financial';
+  document.getElementById('dept-detail-icon').textContent = '💰';
+  document.getElementById('dept-detail-badge').textContent = 'Finance';
+  const backBtn = document.querySelector('.dept-back-btn');
+  if(backBtn){ backBtn.textContent = '← Back to Departments'; backBtn.onclick = showDeptGrid; }
+
+  const scheduleBtn = `
+    <button onclick="openDeptSchedule('financial')" style="
+      display:flex;align-items:center;justify-content:center;gap:10px;
+      width:100%;padding:18px 20px;
+      background:linear-gradient(135deg,#15803d,#065f46);
+      color:white;border:none;border-radius:14px;
+      font-family:'Cinzel',serif;font-size:0.92rem;font-weight:800;
+      cursor:pointer;letter-spacing:0.05em;
+      box-shadow:0 4px 16px rgba(6,95,70,0.25);">
+      <span style="font-size:1.6rem;">📋</span>
+      <div style="text-align:left;">
+        <div>Schedule / Ratiba</div>
+        <div style="font-size:0.68rem;font-weight:400;opacity:0.75;font-family:'Nunito',sans-serif;margin-top:2px;">View and manage department schedule</div>
+      </div>
+    </button>`;
+
+  document.getElementById('dept-detail-body').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px;">
+
+      <!-- Records Section -->
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:14px;padding:16px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+          <span style="font-size:1.3rem;">📁</span>
+          <span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:#15803d;letter-spacing:0.04em;">Records / Kumbukumbu</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <button onclick="openFinanceFolder('expenses')" style="
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            padding:20px 12px;gap:8px;
+            background:linear-gradient(135deg,#fef3c7,#fde68a);
+            border:2px solid #f59e0b;border-radius:14px;cursor:pointer;
+            font-family:'Nunito',sans-serif;
+            box-shadow:0 3px 10px rgba(245,158,11,0.2);">
+            <span style="font-size:2.2rem;">📤</span>
+            <span style="font-weight:800;font-size:0.82rem;color:#92400e;font-family:'Cinzel',serif;letter-spacing:0.03em;">EXPENSES</span>
+            <span style="font-size:0.68rem;color:#78350f;opacity:0.8;">Matumizi</span>
+          </button>
+          <button onclick="openFinanceFolder('offerings')" style="
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            padding:20px 12px;gap:8px;
+            background:linear-gradient(135deg,#d1fae5,#a7f3d0);
+            border:2px solid #10b981;border-radius:14px;cursor:pointer;
+            font-family:'Nunito',sans-serif;
+            box-shadow:0 3px 10px rgba(16,185,129,0.2);">
+            <span style="font-size:2.2rem;">🙏</span>
+            <span style="font-weight:800;font-size:0.82rem;color:#065f46;font-family:'Cinzel',serif;letter-spacing:0.03em;">OFFERING</span>
+            <span style="font-size:0.68rem;color:#064e3b;opacity:0.8;">Sadaka / Zaka</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Count/Hesabu -->
+      <button onclick="openFinanceCountDept()" style="
+        display:flex;align-items:center;gap:14px;
+        width:100%;padding:18px 20px;text-align:left;
+        background:linear-gradient(135deg,#1e40af,#0a1f5c);
+        color:white;border:none;border-radius:14px;cursor:pointer;
+        font-family:'Cinzel',serif;
+        box-shadow:0 4px 16px rgba(10,31,92,0.3);">
+        <span style="font-size:1.8rem;">🧮</span>
+        <div>
+          <div style="font-size:0.92rem;font-weight:800;letter-spacing:0.05em;">Count / Hesabu</div>
+          <div style="font-size:0.68rem;font-weight:400;opacity:0.75;font-family:'Nunito',sans-serif;margin-top:3px;">Denomination counting tool — count offering cash</div>
+        </div>
+      </button>
+
+      ${scheduleBtn}
+    </div>`;
+}
+
+// ── Open individual folder (Expenses or Offering) ──
+
+function openFinanceFolder(folder){
+  const isExpenses = folder === 'expenses';
+  document.getElementById('dept-detail-name').textContent = isExpenses ? 'Expenses' : 'Offering';
+  document.getElementById('dept-detail-icon').textContent = isExpenses ? '📤' : '🙏';
+  document.getElementById('dept-detail-badge').textContent = isExpenses ? 'Matumizi' : 'Sadaka';
+  const backBtn = document.querySelector('.dept-back-btn');
+  if(backBtn){ backBtn.textContent = '← Back to Financial'; backBtn.onclick = openFinanceDept; }
+  renderFinanceRecordsDetail(folder);
+}
+
+// ── Open Count/Hesabu inside dept ──
+
+function openFinanceCountDept(){
+  document.getElementById('dept-detail-name').textContent = 'Count / Hesabu';
+  document.getElementById('dept-detail-icon').textContent = '🧮';
+  document.getElementById('dept-detail-badge').textContent = 'Hesabu';
+  const backBtn = document.querySelector('.dept-back-btn');
+  if(backBtn){ backBtn.textContent = '← Back to Financial'; backBtn.onclick = openFinanceDept; }
+  renderFinanceCountDept();
+}
+
+// ── Finance Records Detail (Expenses or Offering) ──
+
+function renderFinanceRecordsDetail(folder){
+  const isExpenses = folder === 'expenses';
+  const icon        = isExpenses ? '📤' : '🙏';
+  const title       = isExpenses ? 'Expenses' : 'Offering';
+  const accentColor = isExpenses ? '#f59e0b' : '#10b981';
+  const darkColor   = isExpenses ? '#92400e' : '#065f46';
+  const bgColor     = isExpenses ? '#fef9ee' : '#f0fdf9';
+  const borderColor = isExpenses ? '#fde68a' : '#a7f3d0';
+
+  const entries = isExpenses ? getFinanceExpenses() : getFinanceOfferings();
+  const canEdit = isFinanceEditor();
+
+  const addForm = canEdit ? `
+    <div style="background:${bgColor};border:1.5px solid ${borderColor};border-radius:12px;padding:14px;margin-bottom:14px;">
+      <div style="font-family:'Cinzel',serif;font-size:0.78rem;font-weight:800;color:${darkColor};margin-bottom:10px;">
+        ${isExpenses ? '➕ Add Expense' : '➕ Add Offering Entry'}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Date / Tarehe</label>
+            <input type="date" id="fin-form-date" value="${new Date().toISOString().slice(0,10)}"
+              style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
+          </div>
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Amount (TZS) / Kiasi</label>
+            <input type="number" id="fin-form-amount" min="0" placeholder="0"
+              style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
+          </div>
+        </div>
+        ${isExpenses ? `
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Description / Maelezo</label>
+          <input type="text" id="fin-form-desc" placeholder="e.g. Sound system repair..."
+            style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
+        </div>
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Category / Aina</label>
+          <select id="fin-form-category" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;font-family:'Nunito',sans-serif;">
+            <option value="General">General</option>
+            <option value="Maintenance">Maintenance / Ukarabati</option>
+            <option value="Utilities">Utilities / Huduma</option>
+            <option value="Events">Events / Matukio</option>
+            <option value="Stationery">Stationery / Ofisi</option>
+            <option value="Transport">Transport / Usafiri</option>
+            <option value="Other">Other / Nyingine</option>
+          </select>
+        </div>` : `
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Service / Ibada</label>
+          <select id="fin-form-service" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;font-family:'Nunito',sans-serif;">
+            <option value="Sunday Service">Sunday Service / Ibada ya Jumapili</option>
+            <option value="Saturday Service">Saturday Service / Ibada ya Jumamosi</option>
+            <option value="Friday Service">Friday Service / Ibada ya Ijumaa</option>
+            <option value="Special Service">Special Service / Ibada Maalum</option>
+            <option value="Tithe">Tithe / Zaka</option>
+          </select>
+        </div>`}
+        <div>
+          <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Notes (optional)</label>
+          <input type="text" id="fin-form-notes" placeholder="Optional notes..."
+            style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
+        </div>
+        <button onclick="saveFinanceEntry('${folder}')" style="
+          padding:10px 18px;background:${accentColor};color:white;border:none;border-radius:10px;
+          font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;cursor:pointer;
+          letter-spacing:0.04em;box-shadow:0 3px 10px rgba(0,0,0,0.15);">
+          Save Entry / Hifadhi
+        </button>
+      </div>
+    </div>` : '';
+
+  const sorted = [...entries].sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.timestamp||0)-(a.timestamp||0));
+  const totalAmt = sorted.reduce((s,e) => s+(parseFloat(e.amount)||0), 0);
+
+  const listHtml = sorted.length === 0 ? `
+    <div style="text-align:center;padding:30px;color:var(--text-light);">
+      <div style="font-size:2rem;margin-bottom:8px;">${icon}</div>
+      <div style="font-size:0.82rem;">No ${title.toLowerCase()} recorded yet.</div>
+      <div style="font-size:0.72rem;opacity:0.7;margin-top:4px;">${isExpenses ? 'Bado hakuna matumizi.' : 'Bado hakuna sadaka.'}</div>
+    </div>` : `
+    <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:0.72rem;color:var(--text-light);">${sorted.length} entr${sorted.length===1?'y':'ies'}</span>
+      <span style="font-size:0.8rem;font-weight:800;color:${darkColor};">Total: TZS ${totalAmt.toLocaleString()}</span>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:8px;">
+      ${sorted.map(e => {
+        const delBtn = canEdit ? `<button onclick="deleteFinanceEntry('${folder}','${e.id}')" style="
+          background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:6px;
+          font-size:0.65rem;font-weight:800;padding:3px 7px;cursor:pointer;
+          font-family:'Nunito',sans-serif;white-space:nowrap;">✕</button>` : '';
+        return `<div style="background:white;border:1.5px solid ${borderColor};border-radius:10px;padding:12px;display:flex;align-items:flex-start;gap:10px;">
+          <div style="width:4px;min-height:40px;border-radius:3px;background:${accentColor};flex-shrink:0;margin-top:2px;"></div>
+          <div style="flex:1;min-width:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;">
+              <span style="font-weight:800;font-size:0.88rem;color:${darkColor};">TZS ${(parseFloat(e.amount)||0).toLocaleString()}</span>
+              <span style="font-size:0.7rem;color:var(--text-light);">${e.date||''}</span>
+            </div>
+            ${isExpenses
+              ? `<div style="font-size:0.78rem;color:#374151;margin-top:3px;">${e.description||'—'}</div>
+                 <div style="font-size:0.68rem;color:var(--text-light);margin-top:2px;">${e.category||'General'}</div>`
+              : `<div style="font-size:0.78rem;color:#374151;margin-top:3px;">${e.service||'—'}</div>`}
+            ${e.notes ? `<div style="font-size:0.68rem;color:var(--text-light);margin-top:2px;font-style:italic;">${e.notes}</div>` : ''}
+            <div style="font-size:0.65rem;color:var(--text-light);margin-top:4px;">By: ${e.enteredBy||'unknown'}</div>
+          </div>
+          ${delBtn}
+        </div>`;
+      }).join('')}
+    </div>`;
+
+  document.getElementById('dept-detail-body').innerHTML = addForm + listHtml;
+}
+
+function saveFinanceEntry(folder){
+  const isExpenses = folder === 'expenses';
+  const dateVal = (document.getElementById('fin-form-date')?.value || '').trim();
+  const amtVal  = parseFloat(document.getElementById('fin-form-amount')?.value) || 0;
+  if(!dateVal){ showToast('⚠️ Please select a date','error'); return; }
+  if(amtVal <= 0){ showToast('⚠️ Please enter an amount greater than 0','error'); return; }
+  const entry = {
+    id: (isExpenses ? 'exp' : 'off') + '_' + Date.now(),
+    date: dateVal, amount: amtVal,
+    notes: document.getElementById('fin-form-notes')?.value.trim() || '',
+    enteredBy: CU ? CU.displayName || CU.username : 'unknown',
+    timestamp: Date.now()
+  };
+  if(isExpenses){
+    entry.description = document.getElementById('fin-form-desc')?.value.trim() || '';
+    entry.category    = document.getElementById('fin-form-category')?.value || 'General';
+    const arr = getFinanceExpenses(); arr.unshift(entry); saveFinanceExpenses(arr);
+    showToast('✅ Expense saved!','success');
+  } else {
+    entry.service = document.getElementById('fin-form-service')?.value || 'Sunday Service';
+    const arr = getFinanceOfferings(); arr.unshift(entry); saveFinanceOfferings(arr);
+    showToast('✅ Offering entry saved!','success');
+  }
+  openFinanceFolder(folder);
+}
+
+function deleteFinanceEntry(folder, entryId){
+  if(!isFinanceEditor()){ showToast('🔒 Not permitted','error'); return; }
+  if(folder === 'expenses'){
+    saveFinanceExpenses(getFinanceExpenses().filter(e => e.id !== entryId));
+  } else {
+    saveFinanceOfferings(getFinanceOfferings().filter(e => e.id !== entryId));
+  }
+  showToast('🗑️ Entry deleted','success');
+  openFinanceFolder(folder);
+}
+
+// ── Finance Count / Hesabu ──
+
+const FIN_DENOMS = [
+  {val:10000, label:'10,000'},
+  {val:5000,  label:'5,000'},
+  {val:2000,  label:'2,000'},
+  {val:1000,  label:'1,000'},
+  {val:500,   label:'500'},
+  {val:200,   label:'200'},
+  {val:100,   label:'100'},
+  {val:50,    label:'50'},
+];
+
+function renderFinanceCountDept(){
+  const canEdit = isFinanceEditor();
+  document.getElementById('dept-detail-body').innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div style="background:#f8faff;border:1.5px solid #c7d2fe;border-radius:12px;padding:14px;">
+        <div style="font-family:'Cinzel',serif;font-size:0.78rem;font-weight:800;color:#1e40af;margin-bottom:10px;">🧮 Denomination Count Sheet</div>
+        <table style="width:100%;border-collapse:collapse;font-family:'Nunito',sans-serif;font-size:0.82rem;">
+          <thead>
+            <tr style="background:#e0e7ff;">
+              <th style="padding:8px 10px;text-align:left;border-radius:8px 0 0 0;font-weight:800;color:#1e40af;">Denom (TZS)</th>
+              <th style="padding:8px 10px;text-align:center;font-weight:800;color:#1e40af;">Count #</th>
+              <th style="padding:8px 10px;text-align:right;border-radius:0 8px 0 0;font-weight:800;color:#1e40af;">Sub-total</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${FIN_DENOMS.map(d=>`
+            <tr style="border-bottom:1px solid #e5e7eb;">
+              <td style="padding:8px 10px;font-weight:700;color:#374151;">${d.label}</td>
+              <td style="padding:6px 8px;text-align:center;">
+                <input type="number" id="fin-cnt-${d.val}" min="0" value="0"
+                  oninput="updateFinCountTotal()"
+                  style="width:70px;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:7px;font-size:0.82rem;text-align:center;font-family:'Nunito',sans-serif;background:white;">
+              </td>
+              <td id="fin-sub-${d.val}" style="padding:8px 10px;text-align:right;font-weight:700;color:#374151;">0</td>
+            </tr>`).join('')}
+          </tbody>
+          <tfoot>
+            <tr style="background:#e0e7ff;">
+              <td colspan="2" style="padding:10px;font-family:'Cinzel',serif;font-weight:800;color:#1e40af;">TOTAL</td>
+              <td id="fin-count-grand-total" style="padding:10px;text-align:right;font-family:'Cinzel',serif;font-size:1rem;font-weight:800;color:#1e40af;">0</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      ${canEdit ? `
+      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:12px;padding:14px;">
+        <div style="font-family:'Cinzel',serif;font-size:0.78rem;font-weight:800;color:#15803d;margin-bottom:10px;">💾 Save Count as Offering Record</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Date / Tarehe</label>
+            <input type="date" id="fin-cnt-date" value="${new Date().toISOString().slice(0,10)}"
+              style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
+          </div>
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Service / Ibada</label>
+            <select id="fin-cnt-service" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;font-family:'Nunito',sans-serif;">
+              <option value="Sunday Service">Sunday Service</option>
+              <option value="Saturday Service">Saturday Service</option>
+              <option value="Friday Service">Friday Service</option>
+              <option value="Special Service">Special Service</option>
+              <option value="Tithe">Tithe / Zaka</option>
+            </select>
+          </div>
+        </div>
+        <div style="margin-bottom:8px;">
+          <label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Notes (optional)</label>
+          <input type="text" id="fin-cnt-notes" placeholder="Optional notes..."
+            style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:0.82rem;box-sizing:border-box;font-family:'Nunito',sans-serif;">
+        </div>
+        <button onclick="saveCountAsOffering()" style="
+          padding:10px 18px;background:linear-gradient(135deg,#059669,#065f46);
+          color:white;border:none;border-radius:10px;
+          font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;cursor:pointer;
+          letter-spacing:0.04em;box-shadow:0 3px 10px rgba(0,0,0,0.15);">
+          Save to Offering Records / Hifadhi
+        </button>
+      </div>` : ''}
+      <button onclick="resetFinCountSheet()" style="
+        padding:9px 16px;background:#f3f4f6;color:#374151;
+        border:1.5px solid #d1d5db;border-radius:10px;
+        font-family:'Nunito',sans-serif;font-size:0.8rem;font-weight:700;cursor:pointer;">
+        🔄 Reset Sheet / Futa
+      </button>
+    </div>`;
+}
+
+function updateFinCountTotal(){
+  let grand = 0;
+  FIN_DENOMS.forEach(function(d){
+    const cnt = parseInt(document.getElementById('fin-cnt-'+d.val)?.value) || 0;
+    const sub = cnt * d.val;
+    grand += sub;
+    const el = document.getElementById('fin-sub-'+d.val);
+    if(el) el.textContent = sub > 0 ? sub.toLocaleString() : '0';
+  });
+  const gt = document.getElementById('fin-count-grand-total');
+  if(gt) gt.textContent = grand.toLocaleString();
+}
+
+function resetFinCountSheet(){
+  FIN_DENOMS.forEach(function(d){
+    const inp = document.getElementById('fin-cnt-'+d.val);
+    if(inp) inp.value = 0;
+    const sub = document.getElementById('fin-sub-'+d.val);
+    if(sub) sub.textContent = '0';
+  });
+  const gt = document.getElementById('fin-count-grand-total');
+  if(gt) gt.textContent = '0';
+}
+
+function saveCountAsOffering(){
+  let grand = 0;
+  FIN_DENOMS.forEach(function(d){
+    grand += (parseInt(document.getElementById('fin-cnt-'+d.val)?.value)||0) * d.val;
+  });
+  if(grand <= 0){ showToast('⚠️ Total is 0. Enter counts first.','error'); return; }
+  const dateVal = document.getElementById('fin-cnt-date')?.value || new Date().toISOString().slice(0,10);
+  const service = document.getElementById('fin-cnt-service')?.value || 'Sunday Service';
+  const notes   = document.getElementById('fin-cnt-notes')?.value.trim() || '';
+  const entry = {
+    id: 'off_' + Date.now(), date: dateVal, amount: grand, service: service,
+    notes: notes ? notes + ' [count sheet]' : '[count sheet]',
+    enteredBy: CU ? CU.displayName || CU.username : 'unknown',
+    timestamp: Date.now()
+  };
+  const arr = getFinanceOfferings();
+  arr.unshift(entry);
+  saveFinanceOfferings(arr);
+  showToast('✅ Count saved to Offering Records! TZS ' + grand.toLocaleString(),'success');
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ── END FINANCE (Financial Dept) ────────────────────────────────
+// ═══════════════════════════════════════════════════════════════
+
 function openHeadcount(){
   document.getElementById('dept-detail-name').textContent = 'Headcount / Hesabu';
   document.getElementById('dept-detail-icon').textContent = '🔢';
@@ -4887,13 +5303,13 @@ function renderHeadcount(){
             <span class="hce-gender-tag male">M</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
               id="hce-adultMale-${day.id}" value="${saved.adultMale||''}" placeholder="0"
-              class="hce-input hce-input-sm" oninput="recalcHcTotal('${day.id}')"/>
+              class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','adult')"/>
           </div>
           <div class="hce-gender-cell">
             <span class="hce-gender-tag female">F</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
               id="hce-adultFemale-${day.id}" value="${saved.adultFemale||''}" placeholder="0"
-              class="hce-input hce-input-sm" oninput="recalcHcTotal('${day.id}')"/>
+              class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','adult')"/>
           </div>
         </div>
 
@@ -4909,13 +5325,13 @@ function renderHeadcount(){
             <span class="hce-gender-tag male">M</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
               id="hce-childMale-${day.id}" value="${saved.childMale||''}" placeholder="0"
-              class="hce-input hce-input-sm" oninput="recalcHcTotal('${day.id}')"/>
+              class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','child')"/>
           </div>
           <div class="hce-gender-cell">
             <span class="hce-gender-tag female">F</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
               id="hce-childFemale-${day.id}" value="${saved.childFemale||''}" placeholder="0"
-              class="hce-input hce-input-sm" oninput="recalcHcTotal('${day.id}')"/>
+              class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','child')"/>
           </div>
         </div>
 
@@ -5045,6 +5461,27 @@ function recalcHcTotal(dayId){
   if(numEl) numEl.textContent = total || 0;
 }
 
+// Auto-calculate the parent total (Adults or Children) from M + F breakdown.
+// Called whenever a gender sub-input changes.
+// type = 'adult' or 'child'
+function recalcFromGender(dayId, type){
+  const prefix = type === 'adult' ? 'adult' : 'child';
+  const maleEl   = document.getElementById('hce-'+prefix+'Male-'+dayId);
+  const femaleEl = document.getElementById('hce-'+prefix+'Female-'+dayId);
+  const totalEl  = document.getElementById('hce-'+prefix+'Total-'+dayId);
+  if(!maleEl || !femaleEl || !totalEl) return;
+  const male   = parseInt(maleEl.value)   || 0;
+  const female = parseInt(femaleEl.value) || 0;
+  // Only update the parent total when at least one gender value is entered
+  if(male > 0 || female > 0){
+    totalEl.value = male + female;
+    // Flash a brief green tint so the user sees the auto-fill
+    totalEl.style.background = '#d1fae5';
+    setTimeout(function(){ totalEl.style.background = ''; }, 700);
+  }
+  recalcHcTotal(dayId);
+}
+
 // ── Date-change handler for headcount columns ──────────────────
 // When the usher picks a different date:
 //   • If data was already saved for that date → load it into the fields
@@ -5124,6 +5561,29 @@ function onHcDateChange(dayId, selectedDate){
 }
 
 function saveAllHcDays(){
+  // ── Validation pass: require at least one column to have adults OR children ──
+  let anyFilled = false;
+  HC_DAYS.forEach(day=>{
+    const a = parseInt(document.getElementById('hce-adultTotal-'+day.id)?.value)||0;
+    const c = parseInt(document.getElementById('hce-childTotal-'+day.id)?.value)||0;
+    if(a > 0 || c > 0) anyFilled = true;
+  });
+  if(!anyFilled){
+    // Flash red border on all primary inputs to signal required
+    HC_DAYS.forEach(day=>{
+      ['hce-adultTotal-'+day.id,'hce-childTotal-'+day.id].forEach(id=>{
+        const el = document.getElementById(id);
+        if(el){
+          el.style.borderColor = '#dc2626';
+          el.style.background  = '#fee2e2';
+          setTimeout(function(){ el.style.borderColor=''; el.style.background=''; }, 2000);
+        }
+      });
+    });
+    showToast('⚠️ Enter Adults or Children count for at least one day','error');
+    return;
+  }
+
   let saved = 0;
   HC_DAYS.forEach(day=>{
     const adults   = parseInt(document.getElementById('hce-adultTotal-'+day.id)?.value)||0;
@@ -5133,8 +5593,9 @@ function saveAllHcDays(){
     const childMale  = parseInt(document.getElementById('hce-childMale-'+day.id)?.value)||0;
     const childFem   = parseInt(document.getElementById('hce-childFemale-'+day.id)?.value)||0;
     const total = adults + children;
-    if(!total) return;
-    const dateVal   = document.getElementById('hc-date-'+day.id)?.value || new Date().toISOString().slice(0,10);
+    if(!total) return;  // skip empty columns silently
+    const dateEl  = document.getElementById('hc-date-'+day.id);
+    const dateVal = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0,10);
     const now       = new Date();
     const ts        = now.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
     const enteredBy = CU ? CU.displayName : 'Unknown';
@@ -5146,10 +5607,42 @@ function saveAllHcDays(){
     saveHeadcountData(hcData);
     saved++;
   });
-  if(!saved){ showToast('Enter at least one attendance number','error'); return; }
   showToast('✅ Attendance saved for '+saved+' day'+(saved>1?'s':''),'success');
   renderHeadcount();
   setTimeout(()=>renderHcHistory(),100);
+}
+
+// ── Delete a single history entry by its id ──────────────────────
+function deleteHcEntry(entryId){
+  const hcData = getHeadcountData();
+  const before = (hcData._history||[]).length;
+  hcData._history = (hcData._history||[]).filter(h => String(h.id) !== String(entryId));
+  saveHeadcountData(hcData);
+  const removed = before - (hcData._history||[]).length;
+  showToast(removed ? '🗑️ Entry deleted' : 'Entry not found', removed ? 'success' : 'error');
+  renderHeadcount();
+  setTimeout(()=>renderHcHistory(), 100);
+}
+
+// ── Remove all duplicate entries (same day + same date) ──────────
+// Keeps the most recent entry for each dayId+date combination.
+function removeHcDuplicates(){
+  const hcData = getHeadcountData();
+  const history = hcData._history || [];
+  const seen = {};
+  const deduped = [];
+  // history is stored newest-first (unshift), so first occurrence = most recent
+  history.forEach(function(h){
+    const key = (h.dayId||'') + '_' + (h.date||'');
+    if(!seen[key]){ seen[key] = true; deduped.push(h); }
+  });
+  const removed = history.length - deduped.length;
+  if(!removed){ showToast('No duplicates found', 'success'); return; }
+  hcData._history = deduped;
+  saveHeadcountData(hcData);
+  showToast('✅ Removed ' + removed + ' duplicate' + (removed !== 1 ? 's' : ''), 'success');
+  renderHeadcount();
+  setTimeout(()=>renderHcHistory(), 100);
 }
 
 function saveHcDay(dayId, dayLabel){
@@ -5461,11 +5954,21 @@ function renderHcHistory(){
     return;
   }
 
+  // ── Deduplicate for accurate summary stats ──
+  // When the same dayId+date appears more than once (duplicate entries),
+  // only count the most-recent record so totals are not inflated.
+  const _statSeen={};
+  const dedupedForStats = filtered.filter(h=>{
+    const k=(h.dayId||'')+'_'+(h.date||'');
+    if(_statSeen[k]) return false;
+    _statSeen[k]=true; return true;
+  });
+
   // ── Per-day stats ──
   const dayDefs = [{id:'sunday',label:'Sunday',color:'#dc2626',light:'#fee2e2'},{id:'saturday',label:'Saturday',color:'#ea580c',light:'#ffedd5'},{id:'friday',label:'Friday',color:'#1d4ed8',light:'#dbeafe'}];
   const dayStats = {};
   dayDefs.forEach(d=>{
-    const recs = filtered.filter(h=>h.dayId===d.id);
+    const recs = dedupedForStats.filter(h=>h.dayId===d.id);
     dayStats[d.id]={
       adults:  recs.reduce((s,h)=>s+(h.adults||0),0),
       children:recs.reduce((s,h)=>s+(h.children||0),0),
@@ -5476,7 +5979,7 @@ function renderHcHistory(){
     };
   });
 
-  const totalAll = dayDefs.reduce((s,d)=>s+dayStats[d.id].total,0);
+  const totalAll = dayDefs.reduce((s,d)=>s+dayStats[d.id].total,0); // uses deduped stats
 
   // ── SECTION 1: Per-Day Stats Grid (like the top of the image) ──
   if(summaryEl){
@@ -5619,6 +6122,14 @@ function renderHcHistory(){
     monthlyEntries[ym].sort((a,b)=>(a.date||'').localeCompare(b.date||''));
   });
 
+  // Pre-compute which entries are duplicates (same dayId + date appears more than once)
+  const _dupeSeen={}, _dupeKeys=new Set();
+  filtered.forEach(h=>{
+    const k=(h.dayId||'')+'_'+(h.date||'');
+    if(_dupeSeen[k]) _dupeKeys.add(k); else _dupeSeen[k]=1; _dupeSeen[k]++;
+  });
+  const hasDuplicates = _dupeKeys.size > 0;
+
   const monthlyKeys=Object.keys(monthlyMap).sort();
   const grandAdults  =monthlyKeys.reduce((s,k)=>s+monthlyMap[k].adults,0);
   const grandChildren=monthlyKeys.reduce((s,k)=>s+monthlyMap[k].children,0);
@@ -5655,15 +6166,25 @@ function renderHcHistory(){
     </tr>`;
 
     // ── Individual date rows ──
+    // Track first-seen key within this render so duplicates are flagged
+    const _seenInMonth={};
     const detailRows = entries.map((h,ei)=>{
       const accent  = dayAccent[h.dayId]||'#475569';
       const dayLbl  = h.dayLabel||(h.dayId?h.dayId.charAt(0).toUpperCase()+h.dayId.slice(1):'—');
       const male    = (h.adultMale||0)+(h.childMale||0);
       const female  = (h.adultFemale||0)+(h.childFemale||0);
-      const rowBg   = ei%2===0?'#f8faff':'white';
+      const entryKey= (h.dayId||'')+'_'+(h.date||'');
+      const isDupe  = _dupeKeys.has(entryKey);
+      const isFirst = !_seenInMonth[entryKey]; // first occurrence = keep, rest = duplicates
+      _seenInMonth[entryKey] = true;
+      const rowBg   = isDupe && !isFirst ? '#fff7ed' : (ei%2===0?'#f8faff':'white');
+      const dupeBadge = isDupe && !isFirst
+        ? `<span style="display:inline-block;background:#ef4444;color:white;font-size:0.52rem;font-weight:800;padding:1px 5px;border-radius:10px;vertical-align:middle;margin-left:5px;">DUPLICATE</span>`
+        : '';
+      const safeId = String(h.id||'').replace(/['"]/g,'');
       return `<tr style="background:${rowBg};border-bottom:1px solid #e2e8f0;">
         <td style="padding:8px 6px 8px 22px;font-size:0.75rem;font-weight:700;color:#0f172a;white-space:nowrap;">
-          <span style="display:inline-block;width:3px;height:28px;background:${accent};border-radius:3px;vertical-align:middle;margin-right:8px;"></span>${fmtDate(h.date)}
+          <span style="display:inline-block;width:3px;height:28px;background:${accent};border-radius:3px;vertical-align:middle;margin-right:8px;"></span>${fmtDate(h.date)}${dupeBadge}
         </td>
         <td style="padding:8px 6px;text-align:center;">
           <span style="display:inline-block;background:${accent};color:white;font-size:0.6rem;font-weight:800;padding:2px 7px;border-radius:20px;white-space:nowrap;">${dayLbl}</span>
@@ -5673,6 +6194,12 @@ function renderHcHistory(){
         <td style="padding:8px 6px;text-align:center;color:#475569;font-weight:700;font-size:0.78rem;">${male||'—'}</td>
         <td style="padding:8px 6px;text-align:center;color:#475569;font-weight:700;font-size:0.78rem;">${female||'—'}</td>
         <td style="padding:8px 6px;text-align:center;font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;color:#0a1f5c;">${h.total||0}</td>
+        <td style="padding:8px 4px;text-align:center;">
+          <button onclick="deleteHcEntry('${safeId}')"
+            title="Delete this entry"
+            style="background:none;border:1.5px solid #fca5a5;color:#dc2626;border-radius:7px;padding:3px 7px;font-size:0.7rem;cursor:pointer;font-weight:800;line-height:1;"
+            onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='none'">✕</button>
+        </td>
       </tr>`;
     }).join('');
 
@@ -5682,9 +6209,17 @@ function renderHcHistory(){
   if(list){
     list.innerHTML = monthlyKeys.length ? `
     <div style="background:white;border:2px solid #e2e8f0;border-radius:14px;overflow:hidden;margin-top:4px;">
-      <div style="background:linear-gradient(135deg,#0a1f5c,#1e40af);padding:12px;text-align:center;">
-        <span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:white;">Monthly </span><span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:#fde047;">Breakdown</span>
+      <div style="background:linear-gradient(135deg,#0a1f5c,#1e40af);padding:12px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">
+        <div style="text-align:center;">
+          <span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:white;">Monthly </span><span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:#fde047;">Breakdown</span>
+        </div>
+        ${hasDuplicates ? `<button onclick="removeHcDuplicates()"
+          style="background:#ef4444;color:white;border:none;border-radius:8px;padding:5px 12px;font-family:'Nunito',sans-serif;font-size:0.72rem;font-weight:800;cursor:pointer;white-space:nowrap;"
+          onmouseover="this.style.background='#b91c1c'" onmouseout="this.style.background='#ef4444'">
+          🗑️ Remove Duplicates
+        </button>` : ''}
       </div>
+      ${hasDuplicates ? `<div style="background:#fff7ed;border-bottom:1.5px solid #fde68a;padding:7px 14px;font-size:0.72rem;color:#92400e;font-weight:700;">⚠️ Duplicate entries detected (highlighted in orange). Use <strong>Remove Duplicates</strong> to keep only the most recent entry per date.</div>` : ''}
       <div style="overflow-x:auto;">
         <table style="width:100%;border-collapse:collapse;font-size:0.8rem;">
           <thead>
@@ -5696,6 +6231,7 @@ function renderHcHistory(){
               <th style="${thS}">Male</th>
               <th style="${thS}">Female</th>
               <th style="padding:9px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-size:0.65rem;letter-spacing:0.04em;font-weight:800;">Total</th>
+              <th style="padding:9px 6px;text-align:center;color:rgba(255,255,255,0.6);font-size:0.6rem;font-weight:700;"></th>
             </tr>
           </thead>
           <tbody>${bodyRows}</tbody>
@@ -5707,6 +6243,7 @@ function renderHcHistory(){
               <td style="padding:11px 8px;text-align:center;color:rgba(255,255,255,0.5);font-weight:700;">—</td>
               <td style="padding:11px 8px;text-align:center;color:rgba(255,255,255,0.5);font-weight:700;">—</td>
               <td style="padding:11px 8px;text-align:center;color:#fde047;font-family:'Cinzel',serif;font-size:1rem;font-weight:800;">${grandTotal}</td>
+              <td></td>
             </tr>
           </tfoot>
         </table>
@@ -7989,6 +8526,20 @@ document.addEventListener('DOMContentLoaded', function(){
       _fbInitialized[K_BG] = true;
       console.warn('[MOM] Firebase background listener error:', err);
     });
+
+    // ── 20. Finance Expenses ──────────────────────────────────────
+    fbListen(
+      FB_FIN_EXPENSES_PATH, K_FIN_EXPENSES,
+      function(d){ return Array.isArray(d); },
+      [function(){ if(document.getElementById('finance-records-view') && document.getElementById('finance-records-view').style.display !== 'none') renderFinanceRecordsDetail('expenses'); }]
+    );
+
+    // ── 21. Finance Offerings ─────────────────────────────────────
+    fbListen(
+      FB_FIN_OFFERINGS_PATH, K_FIN_OFFERINGS,
+      function(d){ return Array.isArray(d); },
+      [function(){ if(document.getElementById('finance-records-view') && document.getElementById('finance-records-view').style.display !== 'none') renderFinanceRecordsDetail('offerings'); }]
+    );
 
     console.log('[MOM] Firebase real-time listeners attached ✔ (full two-way sync enabled)');
   }
