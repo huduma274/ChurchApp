@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -4897,37 +4899,20 @@ function openFinanceDept(){
   document.getElementById('dept-detail-body').innerHTML = `
     <div style="display:flex;flex-direction:column;gap:14px;">
 
-      <!-- Records Section -->
-      <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:14px;padding:16px;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-          <span style="font-size:1.3rem;">📁</span>
-          <span style="font-family:'Cinzel',serif;font-size:0.88rem;font-weight:800;color:#15803d;letter-spacing:0.04em;">Records / Kumbukumbu</span>
+      <!-- Records button -->
+      <button onclick="openFinanceRecordsHome()" style="
+        display:flex;align-items:center;gap:14px;
+        width:100%;padding:18px 20px;text-align:left;
+        background:linear-gradient(135deg,#d1fae5,#a7f3d0);
+        color:#065f46;border:2px solid #10b981;border-radius:14px;cursor:pointer;
+        font-family:'Cinzel',serif;
+        box-shadow:0 4px 16px rgba(16,185,129,0.2);">
+        <span style="font-size:1.8rem;">📁</span>
+        <div>
+          <div style="font-size:0.92rem;font-weight:800;letter-spacing:0.05em;">Records / Kumbukumbu</div>
+          <div style="font-size:0.68rem;font-weight:400;opacity:0.75;font-family:'Nunito',sans-serif;margin-top:3px;">Expenses and Offering folders</div>
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <button onclick="openFinanceFolder('expenses')" style="
-            display:flex;flex-direction:column;align-items:center;justify-content:center;
-            padding:20px 12px;gap:8px;
-            background:linear-gradient(135deg,#fef3c7,#fde68a);
-            border:2px solid #f59e0b;border-radius:14px;cursor:pointer;
-            font-family:'Nunito',sans-serif;
-            box-shadow:0 3px 10px rgba(245,158,11,0.2);">
-            <span style="font-size:2.2rem;">📤</span>
-            <span style="font-weight:800;font-size:0.82rem;color:#92400e;font-family:'Cinzel',serif;letter-spacing:0.03em;">EXPENSES</span>
-            <span style="font-size:0.68rem;color:#78350f;opacity:0.8;">Matumizi</span>
-          </button>
-          <button onclick="openFinanceFolder('offerings')" style="
-            display:flex;flex-direction:column;align-items:center;justify-content:center;
-            padding:20px 12px;gap:8px;
-            background:linear-gradient(135deg,#d1fae5,#a7f3d0);
-            border:2px solid #10b981;border-radius:14px;cursor:pointer;
-            font-family:'Nunito',sans-serif;
-            box-shadow:0 3px 10px rgba(16,185,129,0.2);">
-            <span style="font-size:2.2rem;">🙏</span>
-            <span style="font-weight:800;font-size:0.82rem;color:#065f46;font-family:'Cinzel',serif;letter-spacing:0.03em;">OFFERING</span>
-            <span style="font-size:0.68rem;color:#064e3b;opacity:0.8;">Sadaka / Zaka</span>
-          </button>
-        </div>
-      </div>
+      </button>
 
       <!-- Count/Hesabu -->
       <button onclick="openFinanceCountDept()" style="
@@ -4948,6 +4933,42 @@ function openFinanceDept(){
     </div>`;
 }
 
+// ── Records home — shows Expenses + Offering folder buttons ──
+
+function openFinanceRecordsHome(){
+  document.getElementById('dept-detail-name').textContent = 'Records';
+  document.getElementById('dept-detail-icon').textContent = '📁';
+  document.getElementById('dept-detail-badge').textContent = 'Kumbukumbu';
+  const backBtn = document.querySelector('.dept-back-btn');
+  if(backBtn){ backBtn.textContent = '← Back to Financial'; backBtn.onclick = openFinanceDept; }
+
+  document.getElementById('dept-detail-body').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+      <button onclick="openFinanceFolder('expenses')" style="
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        padding:28px 12px;gap:10px;
+        background:linear-gradient(135deg,#fef3c7,#fde68a);
+        border:2px solid #f59e0b;border-radius:16px;cursor:pointer;
+        font-family:'Nunito',sans-serif;
+        box-shadow:0 4px 14px rgba(245,158,11,0.25);">
+        <span style="font-size:2.6rem;">📤</span>
+        <span style="font-weight:800;font-size:0.85rem;color:#92400e;font-family:'Cinzel',serif;letter-spacing:0.03em;">EXPENSES</span>
+        <span style="font-size:0.7rem;color:#78350f;opacity:0.8;">Matumizi</span>
+      </button>
+      <button onclick="openFinanceFolder('offerings')" style="
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        padding:28px 12px;gap:10px;
+        background:linear-gradient(135deg,#d1fae5,#a7f3d0);
+        border:2px solid #10b981;border-radius:16px;cursor:pointer;
+        font-family:'Nunito',sans-serif;
+        box-shadow:0 4px 14px rgba(16,185,129,0.25);">
+        <span style="font-size:2.6rem;">🙏</span>
+        <span style="font-weight:800;font-size:0.85rem;color:#065f46;font-family:'Cinzel',serif;letter-spacing:0.03em;">OFFERING</span>
+        <span style="font-size:0.7rem;color:#064e3b;opacity:0.8;">Sadaka / Zaka</span>
+      </button>
+    </div>`;
+}
+
 // ── Open individual folder (Expenses or Offering) ──
 
 function openFinanceFolder(folder){
@@ -4956,7 +4977,7 @@ function openFinanceFolder(folder){
   document.getElementById('dept-detail-icon').textContent = isExpenses ? '📤' : '🙏';
   document.getElementById('dept-detail-badge').textContent = isExpenses ? 'Matumizi' : 'Sadaka';
   const backBtn = document.querySelector('.dept-back-btn');
-  if(backBtn){ backBtn.textContent = '← Back to Financial'; backBtn.onclick = openFinanceDept; }
+  if(backBtn){ backBtn.textContent = '← Back to Records'; backBtn.onclick = openFinanceRecordsHome; }
   renderFinanceRecordsDetail(folder);
 }
 
