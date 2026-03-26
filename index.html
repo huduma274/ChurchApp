@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -4936,22 +4938,6 @@ function openFinanceDept(){
   const backBtn = document.querySelector('.dept-back-btn');
   if(backBtn){ backBtn.textContent = '← Back to Departments'; backBtn.onclick = showDeptGrid; }
 
-  const scheduleBtn = `
-    <button onclick="openDeptSchedule('financial')" style="
-      display:flex;align-items:center;justify-content:center;gap:10px;
-      width:100%;padding:18px 20px;
-      background:linear-gradient(135deg,#15803d,#065f46);
-      color:white;border:none;border-radius:14px;
-      font-family:'Cinzel',serif;font-size:0.92rem;font-weight:800;
-      cursor:pointer;letter-spacing:0.05em;
-      box-shadow:0 4px 16px rgba(6,95,70,0.25);">
-      <span style="font-size:1.6rem;">📋</span>
-      <div style="text-align:left;">
-        <div>Schedule / Ratiba</div>
-        <div style="font-size:0.68rem;font-weight:400;opacity:0.75;font-family:'Nunito',sans-serif;margin-top:2px;">View and manage department schedule</div>
-      </div>
-    </button>`;
-
   const _pendingReqs = (CU && CU.role === 'super') ? getFinEditReqs().filter(function(r){ return r.status==='pending'; }) : [];
   const _reqBanner = (CU && CU.role === 'super') ? `
     <button onclick="renderFinEditRequestsPanel()" style="
@@ -5006,8 +4992,6 @@ function openFinanceDept(){
           <div style="font-size:0.74rem;font-weight:400;opacity:0.75;font-family:'Nunito',sans-serif;margin-top:3px;">Denomination counting tool — count offering cash</div>
         </div>
       </button>
-
-      ${scheduleBtn}
 
       <!-- Ripoti Ya Kifedha -->
       <button onclick="openFinanceReport()" style="
