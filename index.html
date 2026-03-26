@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -2190,8 +2192,9 @@ const FB_USHER_PATH     = 'mom-ministry/app/usherSched';
 const FB_LOGO_PATH      = 'mom-ministry/branding/logo';
 const FB_LOGO_SIZE_PATH = 'mom-ministry/branding/logoSize';
 const FB_BG_PATH        = 'mom-ministry/branding/background';
-const FB_FIN_EXPENSES_PATH = 'mom-ministry/finance/expenses';
-const FB_FIN_OFFERINGS_PATH= 'mom-ministry/finance/offerings';
+const FB_FIN_EXPENSES_PATH    = 'mom-ministry/finance/expenses';
+const FB_FIN_OFFERINGS_PATH   = 'mom-ministry/finance/offerings';
+const FB_FIN_EDIT_REQS_PATH   = 'mom-ministry/finance/edit-requests';
 // Firebase objects (initialised below; null if config not yet filled in)
 let _fbApp = null, _fbDb = null;
 (function(){
@@ -2219,8 +2222,9 @@ const K_WASIM_SUN    = 'mom_wasim_sun_v1';
 const K_WASIM_SAT    = 'mom_wasim_sat_v1';
 const K_WASIM_ACCESS = 'mom_wasim_access_v2';
 const K_WIN_OVERRIDES= 'mom_win_overrides_v1';
-const K_FIN_EXPENSES = 'mom_fin_expenses_v1';
-const K_FIN_OFFERINGS= 'mom_fin_offerings_v1';
+const K_FIN_EXPENSES   = 'mom_fin_expenses_v1';
+const K_FIN_OFFERINGS  = 'mom_fin_offerings_v1';
+const K_FIN_EDIT_REQS  = 'mom_fin_edit_reqs_v1';
 
 // ── Firebase two-way sync map ──────────────────────────────────
 // Keys listed here are written to Firebase whenever sv() is called
@@ -2245,8 +2249,9 @@ const _FB_PATHS = {
   [K_LOGO]        : FB_LOGO_PATH,
   [K_LOGO_SIZE]   : FB_LOGO_SIZE_PATH,
   [K_BG]          : FB_BG_PATH,
-  [K_FIN_EXPENSES] : FB_FIN_EXPENSES_PATH,
-  [K_FIN_OFFERINGS]: FB_FIN_OFFERINGS_PATH,
+  [K_FIN_EXPENSES]  : FB_FIN_EXPENSES_PATH,
+  [K_FIN_OFFERINGS] : FB_FIN_OFFERINGS_PATH,
+  [K_FIN_EDIT_REQS] : FB_FIN_EDIT_REQS_PATH,
 };
 
 const DEF_HEADERS = {
@@ -4864,6 +4869,27 @@ function getFinanceOfferings(){ return ld(K_FIN_OFFERINGS, []); }
 function saveFinanceExpenses(arr){ sv(K_FIN_EXPENSES, arr); }
 function saveFinanceOfferings(arr){ sv(K_FIN_OFFERINGS, arr); }
 
+function getFinEditReqs(){ return ld(K_FIN_EDIT_REQS, []); }
+function saveFinEditReqs(arr){ sv(K_FIN_EDIT_REQS, arr); }
+
+// Returns the active (approved, not-expired) edit request for a specific entry, or null
+function getActiveEditReq(folder, entryId){
+  var now = Date.now();
+  return getFinEditReqs().find(function(r){
+    return r.folder===folder && r.entryId===entryId
+      && r.status==='approved' && r.requestedBy===(CU&&CU.username)
+      && (r.expiresAt||0) > now;
+  }) || null;
+}
+// Returns the pending edit request for a specific entry, or null
+function getPendingEditReq(folder, entryId){
+  return getFinEditReqs().find(function(r){
+    return r.folder===folder && r.entryId===entryId
+      && r.status==='pending'
+      && r.requestedBy===(CU&&CU.username);
+  }) || null;
+}
+
 function isFinanceEditor(){
   if(!CU) return false;
   return CU.role === 'super' || CU.role === 'admin';
@@ -4928,6 +4954,24 @@ function openFinanceDept(){
       </button>
 
       ${scheduleBtn}
+
+      ${(CU && CU.role === 'super') ? (() => {
+        const pending = getFinEditReqs().filter(function(r){ return r.status==='pending'; });
+        return `<button onclick="renderFinEditRequestsPanel()" style="
+          display:flex;align-items:center;gap:14px;
+          width:100%;padding:16px 20px;text-align:left;
+          background:${pending.length > 0 ? 'linear-gradient(135deg,#fef3c7,#fde68a)' : '#f9fafb'};
+          color:${pending.length > 0 ? '#92400e' : '#6b7280'};
+          border:2px solid ${pending.length > 0 ? '#f59e0b' : '#e5e7eb'};
+          border-radius:14px;cursor:pointer;font-family:'Cinzel',serif;
+          box-shadow:${pending.length > 0 ? '0 4px 16px rgba(245,158,11,0.25)' : 'none'};">
+          <span style="font-size:1.6rem;">${pending.length > 0 ? '⚠️' : '📋'}</span>
+          <div>
+            <div style="font-size:0.88rem;font-weight:800;letter-spacing:0.04em;">Edit Requests</div>
+            <div style="font-size:0.68rem;font-weight:400;opacity:0.75;font-family:'Nunito',sans-serif;margin-top:2px;">${pending.length > 0 ? pending.length + ' pending request' + (pending.length > 1 ? 's' : '') + ' awaiting approval' : 'No pending requests'}</div>
+          </div>
+        </button>`;
+      })() : ''}
     </div>`;
 }
 
@@ -5079,10 +5123,37 @@ function renderFinanceRecordsDetail(folder){
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;">
       ${sorted.map(e => {
-        const delBtn = canEdit ? `<button onclick="deleteFinanceEntry('${folder}','${e.id}')" style="
+        const delBtn = (canEdit && isExpenses) ? `<button onclick="deleteFinanceEntry('${folder}','${e.id}')" style="
           background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:6px;
           font-size:0.65rem;font-weight:800;padding:3px 7px;cursor:pointer;
           font-family:'Nunito',sans-serif;white-space:nowrap;">✕</button>` : '';
+        const viewBtn = (!isExpenses && (e.countBreakdown || (e.notes && e.notes.indexOf('[count sheet]')!==-1))) ? `<button onclick="viewCountBreakdown('${e.id}')" style="
+          background:#ede9fe;color:#7c3aed;border:1.5px solid #c4b5fd;border-radius:6px;
+          font-size:0.65rem;font-weight:800;padding:3px 7px;cursor:pointer;
+          font-family:'Nunito',sans-serif;white-space:nowrap;">📊 View</button>` : '';
+        // ── Edit button: all logged-in users can request, super admin edits directly ──
+        const _activeReq  = CU ? getActiveEditReq(folder, e.id)  : null;
+        const _pendingReq = CU ? getPendingEditReq(folder, e.id) : null;
+        const isSup = CU && CU.role === 'super';
+        const editBtn = !CU ? '' : isSup
+          ? `<button onclick="openFinanceEditEntry('${folder}','${e.id}',null)" style="
+              background:#fef3c7;color:#92400e;border:1.5px solid #f59e0b;border-radius:6px;
+              font-size:0.65rem;font-weight:800;padding:3px 7px;cursor:pointer;
+              font-family:'Nunito',sans-serif;white-space:nowrap;">✏️ Edit</button>`
+          : _activeReq
+          ? `<button onclick="openFinanceEditEntry('${folder}','${e.id}','${_activeReq.id}')" style="
+              background:#d1fae5;color:#065f46;border:1.5px solid #10b981;border-radius:6px;
+              font-size:0.65rem;font-weight:800;padding:3px 7px;cursor:pointer;
+              font-family:'Nunito',sans-serif;white-space:nowrap;">✏️ Edit Now</button>`
+          : _pendingReq
+          ? `<button disabled style="
+              background:#f3f4f6;color:#9ca3af;border:1.5px solid #d1d5db;border-radius:6px;
+              font-size:0.65rem;font-weight:800;padding:3px 7px;
+              font-family:'Nunito',sans-serif;white-space:nowrap;">⏳ Pending…</button>`
+          : `<button onclick="requestFinanceEdit('${folder}','${e.id}')" style="
+              background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:6px;
+              font-size:0.65rem;font-weight:800;padding:3px 7px;cursor:pointer;
+              font-family:'Nunito',sans-serif;white-space:nowrap;">✏️ Edit</button>`;
         return `<div style="background:white;border:1.5px solid ${borderColor};border-radius:10px;padding:12px;display:flex;align-items:flex-start;gap:10px;">
           <div style="width:4px;min-height:40px;border-radius:3px;background:${accentColor};flex-shrink:0;margin-top:2px;"></div>
           <div style="flex:1;min-width:0;">
@@ -5097,12 +5168,147 @@ function renderFinanceRecordsDetail(folder){
             ${e.notes ? `<div style="font-size:0.68rem;color:var(--text-light);margin-top:2px;font-style:italic;">${e.notes}</div>` : ''}
             <div style="font-size:0.65rem;color:var(--text-light);margin-top:4px;">By: ${e.enteredBy||'unknown'}</div>
           </div>
-          ${delBtn}
+          <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0;">${viewBtn}${editBtn}${delBtn}</div>
         </div>`;
       }).join('')}
     </div>`;
 
   document.getElementById('dept-detail-body').innerHTML = addForm + listHtml;
+}
+
+function viewCountBreakdown(entryId){
+  var offerings = getFinanceOfferings();
+  var entry = offerings.find(function(e){ return e.id === entryId; });
+  if(!entry){ showToast('Entry not found.','error'); return; }
+  var cb = entry.countBreakdown;
+  if(!cb){
+    showToast('Detailed breakdown not available. Re-submit a fresh count sheet to capture it.','error');
+    return;
+  }
+
+  // ── Pre-compute all display values (fmtUSD not available in new tab) ──
+  function dollarStr(cents){ return '$'+(cents/100).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g,','); }
+
+  var billsBodyHtml = '';
+  (cb.bills||[]).forEach(function(r){
+    billsBodyHtml +=
+      '<tr>'
+      +'<td>'+r.label+'</td>'
+      +'<td class="c">'+r.qty+'</td>'
+      +'<td class="r b">'+dollarStr(r.subCents)+'</td>'
+      +'</tr>';
+  });
+  var coinsBodyHtml = '';
+  (cb.coins||[]).forEach(function(r){
+    coinsBodyHtml +=
+      '<tr>'
+      +'<td><span class="coin" style="background:'+r.coinColor+';color:'+r.textColor+'">&#162;</span>'+r.label+' ('+r.cent+')</td>'
+      +'<td class="c">'+r.qty+'</td>'
+      +'<td class="r b">'+dollarStr(r.subCents)+'</td>'
+      +'</tr>';
+  });
+
+  var billsSection = billsBodyHtml ? (
+    '<div class="sec-hdr">&#128181; BILLS</div>'
+    +'<table><thead><tr><th>Denomination</th><th class="c">Qty</th><th class="r">Total</th></tr></thead>'
+    +'<tbody>'+billsBodyHtml+'</tbody>'
+    +'<tfoot><tr>'
+    +'<td colspan="2" class="sub-lbl">Bills Subtotal</td>'
+    +'<td class="r sub-amt">'+dollarStr(cb.billsCents||0)+'</td>'
+    +'</tr></tfoot></table>'
+  ) : '';
+
+  var coinsSection = coinsBodyHtml ? (
+    '<div class="sec-hdr">&#129683; COINS</div>'
+    +'<table><thead><tr><th>Denomination</th><th class="c">Qty</th><th class="r">Total</th></tr></thead>'
+    +'<tbody>'+coinsBodyHtml+'</tbody>'
+    +'<tfoot><tr>'
+    +'<td colspan="2" class="sub-lbl">Coins Subtotal</td>'
+    +'<td class="r sub-amt">'+dollarStr(cb.coinsCents||0)+'</td>'
+    +'</tr></tfoot></table>'
+  ) : '';
+
+  var dateVal    = entry.date||'—';
+  var serviceVal = entry.service||'—';
+  var nameVal    = entry.enteredBy||'—';
+  var grandTotal = dollarStr(cb.grandCents||0);
+
+  var pageHtml =
+    '<!DOCTYPE html><html lang="en"><head>'
+    +'<meta charset="UTF-8">'
+    +'<meta name="viewport" content="width=device-width,initial-scale=1">'
+    +'<title>Cash Count Sheet \u2013 '+dateVal+'</title>'
+    +'<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;800&family=Nunito:wght@400;700;800&display=swap" rel="stylesheet">'
+    +'<style>'
+    +'*{box-sizing:border-box;margin:0;padding:0}'
+    +'body{font-family:Nunito,Arial,sans-serif;background:#e8edf2;padding:28px 16px;color:#111}'
+    +'.page{background:#fff;max-width:600px;margin:0 auto;border-radius:12px;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.16)}'
+    +'.hdr{background:#1e3a5f;color:#fff;padding:22px 26px}'
+    +'.hdr-title{font-family:Cinzel,serif;font-size:1.08rem;font-weight:800;letter-spacing:.06em}'
+    +'.hdr-sub{font-size:.74rem;opacity:.78;margin-top:4px}'
+    +'.hdr-meta{display:flex;flex-wrap:wrap;gap:14px;margin-top:13px;font-size:.74rem;opacity:.92}'
+    +'.body{padding:22px 26px}'
+    +'.sec-hdr{font-family:Cinzel,serif;font-size:.8rem;font-weight:800;color:#1e3a5f;'
+    +'background:#eef2ff;padding:8px 13px;border-radius:6px;margin-bottom:8px;letter-spacing:.04em}'
+    +'table{width:100%;border-collapse:collapse;margin-bottom:18px;font-size:.84rem}'
+    +'thead tr{background:#f5f7fa}'
+    +'th{padding:8px 11px;text-align:left;font-size:.71rem;color:#6b7280;font-weight:700;border-bottom:2px solid #e0e4ea}'
+    +'td{padding:9px 11px;border-bottom:1px solid #f0f0f0}'
+    +'tfoot td{background:#eef2ff}'
+    +'.c{text-align:center}'
+    +'.r{text-align:right}'
+    +'.b{font-weight:700}'
+    +'.sub-lbl{font-weight:800;font-size:.82rem;color:#1e3a5f}'
+    +'.sub-amt{font-weight:800;font-size:.9rem;color:#1e3a5f;text-align:right}'
+    +'.coin{display:inline-flex;align-items:center;justify-content:center;'
+    +'width:23px;height:23px;border-radius:50%;font-size:11px;font-weight:800;'
+    +'margin-right:7px;vertical-align:middle;flex-shrink:0}'
+    +'.grand{background:#1e3a5f;color:#fff;border-radius:9px;padding:15px 19px;'
+    +'display:flex;justify-content:space-between;align-items:center;margin-top:4px}'
+    +'.grand-lbl{font-family:Cinzel,serif;font-size:.9rem;letter-spacing:.04em}'
+    +'.grand-amt{font-size:1.18rem;font-weight:800}'
+    +'.footer{padding:16px 26px 22px;text-align:center}'
+    +'.print-btn{padding:12px 34px;background:#1e3a5f;color:#fff;border:none;border-radius:9px;'
+    +'font-family:Cinzel,serif;font-size:.88rem;font-weight:800;cursor:pointer;letter-spacing:.04em;'
+    +'box-shadow:0 4px 14px rgba(30,58,95,.35)}'
+    +'@media print{'
+    +'body{background:#fff;padding:0}'
+    +'.page{box-shadow:none;border-radius:0;max-width:100%}'
+    +'.footer{display:none}'
+    +'}'
+    +'</style></head><body>'
+    +'<div class="page">'
+    +'<div class="hdr">'
+    +'<div class="hdr-title">&#9962; MOUNT OF OLIVES MINISTRY</div>'
+    +'<div class="hdr-sub">Cash Count Sheet</div>'
+    +'<div class="hdr-meta">'
+    +'<span>&#128197; '+dateVal+'</span>'
+    +'<span>&#128591; '+serviceVal+'</span>'
+    +'<span>&#128100; '+nameVal+'</span>'
+    +'</div>'
+    +'</div>'
+    +'<div class="body">'
+    +billsSection
+    +coinsSection
+    +'<div class="grand">'
+    +'<span class="grand-lbl">GRAND TOTAL</span>'
+    +'<span class="grand-amt">'+grandTotal+'</span>'
+    +'</div>'
+    +'</div>'
+    +'<div class="footer">'
+    +'<button class="print-btn" onclick="window.print()">&#128424; Print / Save as PDF</button>'
+    +'</div>'
+    +'</div>'
+    +'</body></html>';
+
+  var win = window.open('', '_blank');
+  if(!win){
+    showToast('Allow pop-ups in your browser to view the PDF.','error');
+    return;
+  }
+  win.document.open();
+  win.document.write(pageHtml);
+  win.document.close();
 }
 
 function saveFinanceEntry(folder){
@@ -5192,162 +5398,178 @@ function renderFinanceCountDept(){
           font-family:'Nunito',sans-serif;font-size:0.82rem;color:#374151;min-width:90px;">—</td>
     </tr>`;
 
-  // Coin row builder — shows coin circle icon + name + portrait underneath
-  const coinRow = (d) => `
-    <tr style="border-bottom:1px solid #d1d5db;">
-      <td style="padding:8px 12px;border-right:1px solid #d1d5db;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <!-- Coin circle -->
-          <div style="
-            width:36px;height:36px;border-radius:50%;flex-shrink:0;
-            background:radial-gradient(circle at 35% 35%, ${d.coinColor === '#B87333' ? '#d4884a' : '#e0e0e0'}, ${d.coinColor});
-            border:2px solid ${d.coinColor === '#B87333' ? '#8B5A2B' : '#9e9e9e'};
-            display:flex;align-items:center;justify-content:center;
-            box-shadow:1px 2px 4px rgba(0,0,0,0.25);
-            font-family:'Cinzel',serif;font-size:0.62rem;font-weight:800;
-            color:${d.textColor};letter-spacing:0;">
-            ${d.cent}
-          </div>
-          <!-- Label + portrait -->
-          <div>
-            <div style="font-family:'Nunito',sans-serif;font-size:0.83rem;font-weight:800;color:#374151;">${d.label}</div>
-            <div style="font-family:'Nunito',sans-serif;font-size:0.65rem;color:#9ca3af;margin-top:1px;">${d.portrait}</div>
-          </div>
-        </div>
-      </td>
-      <td style="padding:5px 8px;text-align:center;border-right:1px solid #d1d5db;">
-        <input type="number" id="fin-cnt-${d.id}" min="0" value=""
-          placeholder="0"
-          oninput="updateFinCountTotal()"
-          style="width:100%;padding:6px 8px;border:1.5px solid #d1d5db;border-radius:6px;
-                 font-size:0.82rem;text-align:center;font-family:'Nunito',sans-serif;
-                 background:white;box-sizing:border-box;">
-      </td>
-      <td id="fin-sub-${d.id}" style="padding:9px 12px;text-align:right;font-weight:700;
-          font-family:'Nunito',sans-serif;font-size:0.82rem;color:#374151;min-width:90px;">—</td>
-    </tr>`;
+  // ── Mobile-first builders (flex divs, no table overflow) ──
 
-  // Section header row
+  // Column header bar
+  const colHeader = () => `
+    <div style="display:flex;align-items:center;background:${_TEAL};padding:9px 12px;">
+      <div style="flex:1;font-family:'Cinzel',serif;font-size:0.72rem;font-weight:800;
+                  color:white;letter-spacing:0.06em;">DENOMINATION</div>
+      <div style="width:72px;text-align:center;font-family:'Cinzel',serif;font-size:0.72rem;
+                  font-weight:800;color:white;letter-spacing:0.06em;">QTY</div>
+      <div style="width:82px;text-align:right;font-family:'Cinzel',serif;font-size:0.72rem;
+                  font-weight:800;color:white;letter-spacing:0.06em;padding-right:4px;">TOTAL</div>
+    </div>`;
+
+  // Bill row
+  const billRow = (d) => `
+    <div style="display:flex;align-items:center;padding:10px 12px;border-bottom:1px solid #e5e7eb;background:white;">
+      <div style="flex:1;min-width:0;font-family:'Nunito',sans-serif;font-size:0.9rem;
+                  font-weight:700;color:#374151;">${d.label}</div>
+      <input type="number" id="fin-cnt-${d.id}" min="0" value="" placeholder="0"
+        inputmode="numeric" oninput="updateFinCountTotal()"
+        style="width:72px;flex-shrink:0;padding:9px 6px;border:1.5px solid #d1d5db;
+               border-radius:8px;font-size:1rem;text-align:center;
+               font-family:'Nunito',sans-serif;background:white;box-sizing:border-box;">
+      <div id="fin-sub-${d.id}" style="width:82px;flex-shrink:0;text-align:right;
+           font-family:'Nunito',sans-serif;font-size:0.82rem;font-weight:700;
+           color:#374151;padding-right:4px;">—</div>
+    </div>`;
+
+  // Coin row — with circle icon, name, and portrait
+  const coinRow = (d) => `
+    <div style="display:flex;align-items:center;padding:9px 12px;border-bottom:1px solid #e5e7eb;background:white;gap:10px;">
+      <!-- Coin circle -->
+      <div style="
+        width:38px;height:38px;border-radius:50%;flex-shrink:0;
+        background:radial-gradient(circle at 35% 35%,
+          ${d.coinColor === '#B87333' ? '#d4884a' : '#e8e8e8'}, ${d.coinColor});
+        border:2px solid ${d.coinColor === '#B87333' ? '#8B5A2B' : '#9e9e9e'};
+        display:flex;align-items:center;justify-content:center;
+        box-shadow:1px 2px 5px rgba(0,0,0,0.22);
+        font-family:'Cinzel',serif;font-size:0.58rem;font-weight:800;
+        color:${d.textColor};line-height:1;">${d.cent}</div>
+      <!-- Name + portrait -->
+      <div style="flex:1;min-width:0;">
+        <div style="font-family:'Nunito',sans-serif;font-size:0.9rem;font-weight:800;
+                    color:#374151;white-space:nowrap;">${d.label}</div>
+        <div style="font-family:'Nunito',sans-serif;font-size:0.65rem;color:#9ca3af;
+                    margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.portrait}</div>
+      </div>
+      <!-- Quantity input -->
+      <input type="number" id="fin-cnt-${d.id}" min="0" value="" placeholder="0"
+        inputmode="numeric" oninput="updateFinCountTotal()"
+        style="width:72px;flex-shrink:0;padding:9px 6px;border:1.5px solid #d1d5db;
+               border-radius:8px;font-size:1rem;text-align:center;
+               font-family:'Nunito',sans-serif;background:white;box-sizing:border-box;">
+      <!-- Sub-total -->
+      <div id="fin-sub-${d.id}" style="width:82px;flex-shrink:0;text-align:right;
+           font-family:'Nunito',sans-serif;font-size:0.82rem;font-weight:700;
+           color:#374151;padding-right:4px;">—</div>
+    </div>`;
+
+  // Section header
   const sectionHdr = (label) => `
-    <tr>
-      <td colspan="3" style="background:${_TEAL};padding:9px 12px;
-          font-family:'Cinzel',serif;font-size:0.8rem;font-weight:800;
-          color:white;letter-spacing:0.06em;">${label}</td>
-    </tr>`;
+    <div style="background:${_TEAL};padding:9px 14px;
+        font-family:'Cinzel',serif;font-size:0.78rem;font-weight:800;
+        color:white;letter-spacing:0.06em;">${label}</div>`;
 
   // Subtotal row
   const subtotalRow = (id, label) => `
-    <tr style="background:#f9f9f9;border-top:2px solid ${_TEAL};">
-      <td colspan="2" style="padding:9px 12px;font-family:'Nunito',sans-serif;
-          font-size:0.82rem;font-weight:800;color:#374151;border-right:1px solid #d1d5db;">${label}</td>
-      <td id="${id}" style="padding:9px 12px;text-align:right;font-weight:800;
-          font-family:'Nunito',sans-serif;font-size:0.82rem;color:${_TEAL_DARK};">0</td>
-    </tr>`;
+    <div style="display:flex;align-items:center;padding:10px 14px;
+                background:#f0fafa;border-top:2px solid ${_TEAL};">
+      <div style="flex:1;font-family:'Nunito',sans-serif;font-size:0.82rem;
+                  font-weight:800;color:#374151;">${label}</div>
+      <div id="${id}" style="font-family:'Nunito',sans-serif;font-size:0.88rem;
+           font-weight:800;color:${_TEAL_DARK};">$0.00</div>
+    </div>`;
 
   document.getElementById('dept-detail-body').innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:14px;">
+    <div style="display:flex;flex-direction:column;gap:0;">
 
       <!-- Cash Count Card -->
       <div style="background:white;border:1.5px solid #c8e6e6;border-radius:14px;overflow:hidden;
                   box-shadow:0 3px 12px rgba(109,191,191,0.18);">
 
         <!-- Card Header -->
-        <div style="background:white;padding:16px 18px 10px;text-align:center;border-bottom:2px solid ${_TEAL};">
-          <div style="font-size:1.8rem;margin-bottom:4px;">💰</div>
-          <div style="font-family:'Cinzel',serif;font-size:1.05rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.08em;">Cash Count</div>
-          <div style="font-size:0.7rem;color:var(--text-light);font-family:'Nunito',sans-serif;margin-top:2px;">Hesabu ya Pesa</div>
+        <div style="background:white;padding:14px 16px 10px;text-align:center;border-bottom:2px solid ${_TEAL};">
+          <div style="font-size:1.6rem;margin-bottom:3px;">💰</div>
+          <div style="font-family:'Cinzel',serif;font-size:1rem;font-weight:800;
+                      color:${_TEAL_DARK};letter-spacing:0.08em;">Cash Count</div>
         </div>
 
-        <!-- Date / Name / Service row -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:12px 14px;background:#f8fefe;border-bottom:1px solid #d9eeee;">
-          <div>
-            <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">DATE / Tarehe</label>
+        <!-- Fields — stacked full-width for easy phone tapping -->
+        <div style="display:flex;flex-direction:column;gap:0;background:#f8fefe;border-bottom:2px solid ${_TEAL};">
+          <div style="padding:10px 14px;border-bottom:1px solid #d9eeee;">
+            <label style="font-size:0.65rem;font-weight:800;color:${_TEAL_DARK};
+                          letter-spacing:0.06em;display:block;margin-bottom:5px;text-transform:uppercase;">DATE</label>
             <input type="date" id="fin-cnt-date" value="${today}"
-              style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
-                     font-size:0.82rem;font-family:'Nunito',sans-serif;box-sizing:border-box;
+              style="width:100%;padding:11px 12px;border:1.5px solid ${_TEAL};border-radius:8px;
+                     font-size:1rem;font-family:'Nunito',sans-serif;box-sizing:border-box;
                      background:white;color:#374151;">
           </div>
-          <div>
-            <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">NAME / Jina</label>
+          <div style="padding:10px 14px;border-bottom:1px solid #d9eeee;">
+            <label style="font-size:0.65rem;font-weight:800;color:${_TEAL_DARK};
+                          letter-spacing:0.06em;display:block;margin-bottom:5px;text-transform:uppercase;">NAME</label>
             <input type="text" id="fin-cnt-name" value="${userName}" placeholder="Counter name..."
-              style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
-                     font-size:0.82rem;font-family:'Nunito',sans-serif;box-sizing:border-box;
+              style="width:100%;padding:11px 12px;border:1.5px solid ${_TEAL};border-radius:8px;
+                     font-size:1rem;font-family:'Nunito',sans-serif;box-sizing:border-box;
                      background:white;color:#374151;">
           </div>
-        </div>
-        <div style="padding:8px 14px 12px;background:#f8fefe;border-bottom:1px solid #d9eeee;">
-          <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">SERVICE / Ibada</label>
-          <select id="fin-cnt-service"
-            style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
-                   font-size:0.82rem;font-family:'Nunito',sans-serif;background:white;color:#374151;">
-            <option value="Sunday Service">Sunday Service / Ibada ya Jumapili</option>
-            <option value="Saturday Service">Saturday Service / Ibada ya Jumamosi</option>
-            <option value="Friday Service">Friday Service / Ibada ya Ijumaa</option>
-            <option value="Special Service">Special Service / Ibada Maalum</option>
-            <option value="Tithe">Tithe / Zaka</option>
-          </select>
+          <div style="padding:10px 14px;">
+            <label style="font-size:0.65rem;font-weight:800;color:${_TEAL_DARK};
+                          letter-spacing:0.06em;display:block;margin-bottom:5px;text-transform:uppercase;">SERVICE</label>
+            <select id="fin-cnt-service"
+              style="width:100%;padding:11px 12px;border:1.5px solid ${_TEAL};border-radius:8px;
+                     font-size:1rem;font-family:'Nunito',sans-serif;background:white;color:#374151;">
+              <option value="Sunday Service">Sunday Service</option>
+              <option value="Saturday Service">Saturday Service</option>
+              <option value="Friday Service">Friday Service</option>
+              <option value="Special Service">Special Service</option>
+              <option value="Tithe">Tithe / Zaka</option>
+            </select>
+          </div>
         </div>
 
-        <!-- Table -->
-        <table style="width:100%;border-collapse:collapse;">
-          <!-- Column headers -->
-          <thead>
-            <tr style="background:${_TEAL};">
-              <th style="padding:10px 12px;text-align:left;font-family:'Cinzel',serif;font-size:0.75rem;
-                         font-weight:800;color:white;letter-spacing:0.06em;border-right:1px solid rgba(255,255,255,0.3);">DENOMINATION</th>
-              <th style="padding:10px 12px;text-align:center;font-family:'Cinzel',serif;font-size:0.75rem;
-                         font-weight:800;color:white;letter-spacing:0.06em;border-right:1px solid rgba(255,255,255,0.3);width:110px;">QUANTITY</th>
-              <th style="padding:10px 12px;text-align:right;font-family:'Cinzel',serif;font-size:0.75rem;
-                         font-weight:800;color:white;letter-spacing:0.06em;width:110px;">TOTAL</th>
-            </tr>
-          </thead>
-          <tbody>
-            <!-- Bills / Noti -->
-            ${sectionHdr('💵 BILLS')}
-            ${FIN_BILLS.map(d => row(d)).join('')}
-            ${subtotalRow('fin-bills-subtotal','Bills Sub-total')}
+        <!-- Column headers -->
+        ${colHeader()}
 
-            <!-- Coins -->
-            ${sectionHdr('🪙 COINS')}
-            ${FIN_COINS.map(d => coinRow(d)).join('')}
-            ${subtotalRow('fin-coins-subtotal','Coins Sub-total')}
-          </tbody>
-          <tfoot>
-            <tr style="background:${_TEAL};">
-              <td colspan="2" style="padding:12px 14px;font-family:'Cinzel',serif;font-size:0.88rem;
-                  font-weight:800;color:white;letter-spacing:0.08em;">GRAND TOTAL / JUMLA KUBWA</td>
-              <td id="fin-count-grand-total" style="padding:12px 14px;text-align:right;
-                  font-family:'Cinzel',serif;font-size:1rem;font-weight:800;color:white;">0</td>
-            </tr>
-          </tfoot>
-        </table>
+        <!-- BILLS section -->
+        ${sectionHdr('💵 BILLS')}
+        ${FIN_BILLS.map(d => billRow(d)).join('')}
+        ${subtotalRow('fin-bills-subtotal','Bills Sub-total')}
+
+        <!-- COINS section -->
+        ${sectionHdr('🪙 COINS')}
+        ${FIN_COINS.map(d => coinRow(d)).join('')}
+        ${subtotalRow('fin-coins-subtotal','Coins Sub-total')}
+
+        <!-- Grand Total -->
+        <div style="display:flex;align-items:center;background:${_TEAL};padding:14px 16px;">
+          <div style="flex:1;font-family:'Cinzel',serif;font-size:0.88rem;
+                      font-weight:800;color:white;letter-spacing:0.06em;">GRAND TOTAL</div>
+          <div id="fin-count-grand-total" style="font-family:'Cinzel',serif;font-size:1.15rem;
+               font-weight:800;color:white;">$0.00</div>
+        </div>
 
         <!-- Notes -->
         <div style="padding:12px 14px;border-top:1px solid #d9eeee;">
-          <label style="font-size:0.68rem;font-weight:800;color:${_TEAL_DARK};letter-spacing:0.06em;display:block;margin-bottom:4px;text-transform:uppercase;">Notes (optional)</label>
+          <label style="font-size:0.65rem;font-weight:800;color:${_TEAL_DARK};
+                        letter-spacing:0.06em;display:block;margin-bottom:5px;text-transform:uppercase;">Notes (optional)</label>
           <input type="text" id="fin-cnt-notes" placeholder="Optional notes..."
-            style="width:100%;padding:8px 10px;border:1.5px solid ${_TEAL};border-radius:8px;
-                   font-size:0.82rem;font-family:'Nunito',sans-serif;box-sizing:border-box;background:white;">
+            style="width:100%;padding:11px 12px;border:1.5px solid ${_TEAL};border-radius:8px;
+                   font-size:1rem;font-family:'Nunito',sans-serif;box-sizing:border-box;background:white;">
         </div>
 
-        <!-- Action buttons -->
-        <div style="padding:12px 14px;display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid #d9eeee;">
+        <!-- Action buttons — full width, thumb-friendly -->
+        <div style="padding:12px 14px;display:flex;flex-direction:column;gap:10px;border-top:1px solid #d9eeee;">
           ${canEdit ? `
           <button onclick="saveCountAsOffering()" style="
-            flex:1;padding:12px 16px;
+            width:100%;padding:15px;
             background:linear-gradient(135deg,${_TEAL},${_TEAL_DARK});
-            color:white;border:none;border-radius:10px;cursor:pointer;
-            font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;
-            letter-spacing:0.04em;box-shadow:0 3px 12px rgba(42,143,143,0.3);">
+            color:white;border:none;border-radius:12px;cursor:pointer;
+            font-family:'Cinzel',serif;font-size:0.9rem;font-weight:800;
+            letter-spacing:0.04em;box-shadow:0 4px 14px rgba(42,143,143,0.35);">
             ✅ Submit &amp; Save to Offering
           </button>` : ''}
           <button onclick="resetFinCountSheet()" style="
-            padding:12px 16px;background:#f3f4f6;color:#6b7280;
-            border:1.5px solid #d1d5db;border-radius:10px;cursor:pointer;
-            font-family:'Nunito',sans-serif;font-size:0.8rem;font-weight:700;">
-            🔄 Reset
+            width:100%;padding:13px;background:#f3f4f6;color:#6b7280;
+            border:1.5px solid #d1d5db;border-radius:12px;cursor:pointer;
+            font-family:'Nunito',sans-serif;font-size:0.88rem;font-weight:700;">
+            🔄 Reset Sheet
           </button>
         </div>
+
       </div>
     </div>`;
 }
@@ -5394,30 +5616,284 @@ function resetFinCountSheet(){
 
 function saveCountAsOffering(){
   // Sum in cents, then convert to dollars for storage
-  let grandCents = 0;
-  FIN_DENOMS.forEach(function(d){
-    grandCents += (parseInt(document.getElementById('fin-cnt-'+d.id)?.value)||0) * d.val;
-  });
+  let billsCents = 0, coinsCents = 0;
+  FIN_BILLS.forEach(function(d){ billsCents += (parseInt(document.getElementById('fin-cnt-'+d.id)?.value)||0) * d.val; });
+  FIN_COINS.forEach(function(d){ coinsCents += (parseInt(document.getElementById('fin-cnt-'+d.id)?.value)||0) * d.val; });
+  const grandCents = billsCents + coinsCents;
   if(grandCents <= 0){ showToast('⚠️ Total is $0.00. Enter counts first.','error'); return; }
-  const grandDollars = grandCents / 100;
+
   const dateVal = document.getElementById('fin-cnt-date')?.value  || new Date().toISOString().slice(0,10);
   const service = document.getElementById('fin-cnt-service')?.value || 'Sunday Service';
   const name    = document.getElementById('fin-cnt-name')?.value.trim() || (CU ? CU.displayName||CU.username : 'unknown');
   const notes   = document.getElementById('fin-cnt-notes')?.value.trim() || '';
+
+  // Capture per-denomination breakdown so the Offering folder can show a detail view
+  const billBreakdown = FIN_BILLS.map(function(d){
+    const qty = parseInt(document.getElementById('fin-cnt-'+d.id)?.value)||0;
+    return {label:d.label, qty:qty, subCents:qty*d.val};
+  }).filter(function(r){ return r.qty > 0; });
+
+  const coinBreakdown = FIN_COINS.map(function(d){
+    const qty = parseInt(document.getElementById('fin-cnt-'+d.id)?.value)||0;
+    return {label:d.label, cent:d.cent, coinColor:d.coinColor, textColor:d.textColor, qty:qty, subCents:qty*d.val};
+  }).filter(function(r){ return r.qty > 0; });
+
   const entry = {
     id: 'off_' + Date.now(),
     date: dateVal,
-    amount: grandDollars,
+    amount: grandCents / 100,
     service: service,
     notes: notes ? notes + ' [count sheet]' : '[count sheet]',
     enteredBy: name,
-    timestamp: Date.now()
+    timestamp: Date.now(),
+    countBreakdown: {
+      bills: billBreakdown,
+      coins: coinBreakdown,
+      billsCents: billsCents,
+      coinsCents: coinsCents,
+      grandCents: grandCents
+    }
   };
   const arr = getFinanceOfferings();
   arr.unshift(entry);
   saveFinanceOfferings(arr);
   showToast('✅ Saved to Offering Records! ' + fmtUSD(grandCents),'success');
   resetFinCountSheet();
+}
+
+// ── Finance Edit Request System ─────────────────────────────────
+
+// Regular user: submits an edit request (one per entry at a time)
+function requestFinanceEdit(folder, entryId){
+  if(!CU){ showToast('Please sign in first.','error'); return; }
+  // Prevent duplicate pending requests
+  if(getPendingEditReq(folder, entryId)){
+    showToast('⏳ Your request is already pending with Financial Counsel.','info');
+    return;
+  }
+  var isExpenses = folder === 'expenses';
+  var entries = isExpenses ? getFinanceExpenses() : getFinanceOfferings();
+  var entry = entries.find(function(e){ return e.id === entryId; });
+  if(!entry){ showToast('Entry not found.','error'); return; }
+  var req = {
+    id: 'req_' + Date.now(),
+    folder: folder,
+    entryId: entryId,
+    entryDate: entry.date || '',
+    entryAmount: entry.amount || 0,
+    requestedBy: CU.username,
+    requestedByName: CU.displayName || CU.username,
+    requestedAt: Date.now(),
+    status: 'pending'
+  };
+  var arr = getFinEditReqs();
+  arr.push(req);
+  saveFinEditReqs(arr);
+  showToast('📨 Request sent to Financial Counsel. You will be notified when access is granted.', 'success');
+  // Re-render so the button shows "Pending…"
+  var folder_ = folder;
+  renderFinanceRecordsDetail(folder_);
+}
+
+// Super admin: renders the pending-requests management panel into the Financial dept body
+function renderFinEditRequestsPanel(){
+  var reqs = getFinEditReqs().filter(function(r){ return r.status === 'pending'; });
+  var body = document.getElementById('dept-detail-body');
+  if(!body) return;
+  var backBtn = document.querySelector('.dept-back-btn');
+  if(backBtn){ backBtn.textContent = '← Back to Financial'; backBtn.onclick = openFinanceDept; }
+  document.getElementById('dept-detail-name').textContent = 'Edit Requests';
+  document.getElementById('dept-detail-icon').textContent = '📋';
+  document.getElementById('dept-detail-badge').textContent = 'Approval Queue';
+
+  if(reqs.length === 0){
+    body.innerHTML = '<div style="text-align:center;padding:40px 20px;color:var(--text-light);">'
+      +'<div style="font-size:2.2rem;margin-bottom:10px;">✅</div>'
+      +'<div style="font-size:0.88rem;font-weight:700;">No pending edit requests.</div>'
+      +'<div style="font-size:0.74rem;margin-top:4px;opacity:0.7;">All requests have been handled.</div>'
+      +'</div>';
+    return;
+  }
+
+  var rows = reqs.map(function(r){
+    var dt = r.requestedAt ? new Date(r.requestedAt).toLocaleString() : '—';
+    return '<div style="background:white;border:1.5px solid #fde68a;border-radius:12px;padding:14px 16px;margin-bottom:10px;">'
+      +'<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;">'
+      +'<div style="flex:1;min-width:0;">'
+      +'<div style="font-weight:800;font-size:0.86rem;color:#111;">👤 '+r.requestedByName+'</div>'
+      +'<div style="font-size:0.76rem;color:#374151;margin-top:3px;">Folder: <strong>'+(r.folder==='expenses'?'Expenses':'Offering')+'</strong> &nbsp;|&nbsp; Entry: <strong>$'+parseFloat(r.entryAmount||0).toLocaleString()+'</strong> on <strong>'+(r.entryDate||'—')+'</strong></div>'
+      +'<div style="font-size:0.68rem;color:var(--text-light);margin-top:3px;">Requested: '+dt+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-shrink:0;margin-top:2px;">'
+      +'<button onclick="grantFinEditRequest(\''+r.id+'\')" style="'
+      +'background:#d1fae5;color:#065f46;border:1.5px solid #10b981;border-radius:7px;'
+      +'font-size:0.72rem;font-weight:800;padding:5px 10px;cursor:pointer;font-family:\'Nunito\',sans-serif;">✅ Grant</button>'
+      +'<button onclick="denyFinEditRequest(\''+r.id+'\')" style="'
+      +'background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:7px;'
+      +'font-size:0.72rem;font-weight:800;padding:5px 10px;cursor:pointer;font-family:\'Nunito\',sans-serif;">✕ Deny</button>'
+      +'</div>'
+      +'</div>'
+      +'</div>';
+  }).join('');
+
+  body.innerHTML = '<div style="font-family:\'Cinzel\',serif;font-size:0.78rem;font-weight:800;color:#92400e;'
+    +'background:#fef9ee;border:1.5px solid #fde68a;padding:10px 14px;border-radius:10px;margin-bottom:14px;">'
+    +'⚠️ '+reqs.length+' pending edit request'+(reqs.length>1?'s':'')+' awaiting your approval'
+    +'</div>'
+    + rows;
+}
+
+// Super admin: grant an edit request (valid for 30 minutes)
+function grantFinEditRequest(reqId){
+  if(!CU || CU.role !== 'super'){ showToast('Only Financial Counsel can grant access.','error'); return; }
+  var arr = getFinEditReqs();
+  var req = arr.find(function(r){ return r.id === reqId; });
+  if(!req){ showToast('Request not found.','error'); return; }
+  req.status    = 'approved';
+  req.grantedBy = CU.username;
+  req.grantedAt = Date.now();
+  req.expiresAt = Date.now() + 30 * 60 * 1000; // 30 minutes
+  saveFinEditReqs(arr);
+  showToast('✅ Edit access granted to '+req.requestedByName+' for 30 minutes.','success');
+  renderFinEditRequestsPanel();
+}
+
+// Super admin: deny a request
+function denyFinEditRequest(reqId){
+  if(!CU || CU.role !== 'super'){ showToast('Only Financial Counsel can manage requests.','error'); return; }
+  var arr = getFinEditReqs();
+  var req = arr.find(function(r){ return r.id === reqId; });
+  if(!req){ return; }
+  req.status   = 'denied';
+  req.deniedBy = CU.username;
+  req.deniedAt = Date.now();
+  saveFinEditReqs(arr);
+  showToast('Request from '+req.requestedByName+' denied.','info');
+  renderFinEditRequestsPanel();
+}
+
+// Open inline edit form for an entry (reqId=null means super admin direct edit)
+function openFinanceEditEntry(folder, entryId, reqId){
+  if(!CU){ showToast('Please sign in.','error'); return; }
+  var isSup = CU.role === 'super';
+  if(!isSup && !reqId){ showToast('You need approved access to edit.','error'); return; }
+  var isExpenses = folder === 'expenses';
+  var entries = isExpenses ? getFinanceExpenses() : getFinanceOfferings();
+  var entry = entries.find(function(e){ return e.id === entryId; });
+  if(!entry){ showToast('Entry not found.','error'); return; }
+
+  var accentColor = isExpenses ? '#f59e0b' : '#10b981';
+  var darkColor   = isExpenses ? '#92400e' : '#065f46';
+  var bgColor     = isExpenses ? '#fef9ee' : '#f0fdf9';
+  var borderColor = isExpenses ? '#fde68a' : '#a7f3d0';
+
+  var serviceOptions = ['Sunday Service','Saturday Service','Friday Service','Special Service','Tithe'].map(function(s){
+    return '<option value="'+s+'"'+(entry.service===s?' selected':'')+'>'+s+'</option>';
+  }).join('');
+  var categoryOptions = ['General','Maintenance','Utilities','Events','Stationery','Transport','Other'].map(function(c){
+    return '<option value="'+c+'"'+(entry.category===c?' selected':'')+'>'+c+'</option>';
+  }).join('');
+
+  var modalHtml =
+    '<div id="fin-edit-modal" onclick="if(event.target.id===\'fin-edit-modal\')closeFinanceEditModal()" style="'
+    +'position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:9998;'
+    +'display:flex;align-items:center;justify-content:center;padding:16px;box-sizing:border-box;">'
+    +'<div style="background:white;border-radius:14px;width:100%;max-width:420px;max-height:92vh;overflow-y:auto;'
+    +'box-shadow:0 16px 50px rgba(0,0,0,0.3);">'
+    // Header
+    +'<div style="background:'+darkColor+';color:white;padding:14px 18px;border-radius:14px 14px 0 0;'
+    +'display:flex;justify-content:space-between;align-items:center;">'
+    +'<div>'
+    +'<div style="font-family:\'Cinzel\',serif;font-size:0.92rem;font-weight:800;letter-spacing:0.04em;">✏️ Edit '+(isExpenses?'Expense':'Offering')+'</div>'
+    +'<div style="font-size:0.68rem;opacity:0.8;margin-top:2px;">Editing entry from '+(entry.date||'—')+'</div>'
+    +'</div>'
+    +'<button onclick="closeFinanceEditModal()" style="background:rgba(255,255,255,0.2);border:none;color:white;'
+    +'border-radius:6px;padding:4px 9px;font-size:1rem;cursor:pointer;">✕</button>'
+    +'</div>'
+    // Form body
+    +'<div style="padding:16px 18px;display:flex;flex-direction:column;gap:10px;">'
+    +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">'
+    +'<div><label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Date</label>'
+    +'<input type="date" id="fin-edit-date" value="'+(entry.date||'')+'" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:1rem;font-family:\'Nunito\',sans-serif;box-sizing:border-box;"></div>'
+    +'<div><label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Amount ($)</label>'
+    +'<input type="number" id="fin-edit-amount" min="0" step="0.01" value="'+(entry.amount||0)+'" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:1rem;font-family:\'Nunito\',sans-serif;box-sizing:border-box;"></div>'
+    +'</div>'
+    +(isExpenses
+      ? '<div><label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Description</label>'
+        +'<input type="text" id="fin-edit-desc" value="'+(entry.description||'')+'" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:1rem;font-family:\'Nunito\',sans-serif;box-sizing:border-box;"></div>'
+        +'<div><label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Category</label>'
+        +'<select id="fin-edit-category" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:1rem;font-family:\'Nunito\',sans-serif;">'+categoryOptions+'</select></div>'
+      : '<div><label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Service</label>'
+        +'<select id="fin-edit-service" style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:1rem;font-family:\'Nunito\',sans-serif;">'+serviceOptions+'</select></div>'
+    )
+    +'<div><label style="font-size:0.72rem;font-weight:700;color:var(--text-light);display:block;margin-bottom:3px;">Notes</label>'
+    +'<input type="text" id="fin-edit-notes" value="'+(entry.notes||'')+'" placeholder="Optional notes..." style="width:100%;padding:8px 10px;border:1.5px solid #d1d5db;border-radius:8px;font-size:1rem;font-family:\'Nunito\',sans-serif;box-sizing:border-box;"></div>'
+    // Save / Cancel
+    +'<div style="display:flex;gap:8px;margin-top:4px;">'
+    +'<button onclick="saveFinanceEntryEdit(\''+folder+'\',\''+entryId+'\','+(reqId?'\''+reqId+'\'':'null')+')" style="'
+    +'flex:1;padding:11px;background:'+accentColor+';color:white;border:none;border-radius:10px;'
+    +'font-family:\'Cinzel\',serif;font-size:0.84rem;font-weight:800;cursor:pointer;letter-spacing:0.04em;">Save Changes</button>'
+    +'<button onclick="closeFinanceEditModal()" style="'
+    +'padding:11px 16px;background:#f3f4f6;color:#374151;border:1.5px solid #d1d5db;border-radius:10px;'
+    +'font-family:\'Nunito\',sans-serif;font-size:0.84rem;font-weight:700;cursor:pointer;">Cancel</button>'
+    +'</div>'
+    +'</div>'
+    +'</div>'
+    +'</div>';
+
+  var existing = document.getElementById('fin-edit-modal');
+  if(existing) existing.remove();
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+  // Store context on the modal element for saveFinanceEntryEdit
+  document.getElementById('fin-edit-modal').dataset.folder   = folder;
+  document.getElementById('fin-edit-modal').dataset.entryId  = entryId;
+  document.getElementById('fin-edit-modal').dataset.reqId    = reqId || '';
+}
+
+function closeFinanceEditModal(){
+  var el = document.getElementById('fin-edit-modal');
+  if(el) el.remove();
+}
+
+function saveFinanceEntryEdit(folder, entryId, reqId){
+  if(!CU){ showToast('Please sign in.','error'); return; }
+  var dateVal  = (document.getElementById('fin-edit-date')?.value||'').trim();
+  var amtVal   = parseFloat(document.getElementById('fin-edit-amount')?.value) || 0;
+  if(!dateVal){ showToast('⚠️ Please select a date.','error'); return; }
+  if(amtVal <= 0){ showToast('⚠️ Amount must be greater than $0.','error'); return; }
+
+  var isExpenses = folder === 'expenses';
+  var arr = isExpenses ? getFinanceExpenses() : getFinanceOfferings();
+  var idx = arr.findIndex(function(e){ return e.id === entryId; });
+  if(idx === -1){ showToast('Entry not found.','error'); return; }
+
+  var updated = Object.assign({}, arr[idx]);
+  updated.date      = dateVal;
+  updated.amount    = amtVal;
+  updated.notes     = (document.getElementById('fin-edit-notes')?.value||'').trim();
+  updated.editedBy  = CU.username;
+  updated.editedAt  = Date.now();
+
+  if(isExpenses){
+    updated.description = (document.getElementById('fin-edit-desc')?.value||'').trim();
+    updated.category    = document.getElementById('fin-edit-category')?.value || 'General';
+  } else {
+    updated.service = document.getElementById('fin-edit-service')?.value || 'Sunday Service';
+  }
+
+  arr[idx] = updated;
+  if(isExpenses) saveFinanceExpenses(arr); else saveFinanceOfferings(arr);
+
+  // Consume the request (mark as used)
+  if(reqId){
+    var reqs = getFinEditReqs();
+    var req  = reqs.find(function(r){ return r.id === reqId; });
+    if(req){ req.status = 'used'; req.usedAt = Date.now(); saveFinEditReqs(reqs); }
+  }
+
+  closeFinanceEditModal();
+  showToast('✅ Entry updated successfully.','success');
+  renderFinanceRecordsDetail(folder);
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -8700,6 +9176,31 @@ document.addEventListener('DOMContentLoaded', function(){
       FB_FIN_OFFERINGS_PATH, K_FIN_OFFERINGS,
       function(d){ return Array.isArray(d); },
       [function(){ if(document.getElementById('finance-records-view') && document.getElementById('finance-records-view').style.display !== 'none') renderFinanceRecordsDetail('offerings'); }]
+    );
+
+    // ── 22. Finance Edit Requests ─────────────────────────────────
+    fbListen(
+      FB_FIN_EDIT_REQS_PATH, K_FIN_EDIT_REQS,
+      function(d){ return Array.isArray(d); },
+      [function(){
+        // Refresh entry list so button states update (pending → approved)
+        var body = document.getElementById('dept-detail-body');
+        if(!body) return;
+        // If currently viewing an offerings/expenses folder, re-render the list
+        var badge = document.getElementById('dept-detail-badge');
+        if(badge && badge.textContent === 'Offers' || badge && badge.textContent === 'Expenses'){ /* no-op */ }
+        // Re-render entry cards if a folder is open
+        if(typeof renderFinanceRecordsDetail === 'function'){
+          var titleEl = document.getElementById('dept-detail-name');
+          if(titleEl && titleEl.textContent === 'Offering') renderFinanceRecordsDetail('offerings');
+          if(titleEl && titleEl.textContent === 'Expenses') renderFinanceRecordsDetail('expenses');
+        }
+        // Refresh the Financial dept landing if open (so the requests badge updates)
+        if(typeof openFinanceDept === 'function'){
+          var titleEl2 = document.getElementById('dept-detail-name');
+          if(titleEl2 && titleEl2.textContent === 'Financial') openFinanceDept();
+        }
+      }]
     );
 
     console.log('[MOM] Firebase real-time listeners attached ✔ (full two-way sync enabled)');
