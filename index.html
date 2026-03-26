@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -2714,7 +2716,7 @@ function renderW(){
       </td>
       <td style="vertical-align:middle;width:100%;">
         <strong style="font-size:${fs}px;line-height:1.4;">${esc(r.name)}</strong>
-        ${r.sub?`<br><span style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-mid);font-weight:600;">${esc(r.sub)}</span>`:''}
+        ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map(s=>`<br><span style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-mid);font-weight:600;">${esc(s)}</span>`).join('')}
         ${r.role?`<br><span style="font-size:${Math.max(fs-3,11)}px;color:var(--text-light);">${esc(r.role)}</span>`:''}
       </td>
       ${can?`<td style="width:36px;"><button class="btn-del" onclick="delWRow(${i})">&#10005;</button></td>`:''}
@@ -2724,7 +2726,7 @@ function renderW(){
 function addWRow(){
   const t=document.getElementById('w-t').value.trim(),n=document.getElementById('w-n').value.trim(),r=document.getElementById('w-r').value.trim();
   if(!n)return showToast('Fill Name','error');
-  const d=ld(K.walawi,[]);d.push({time:t,name:n,sub:'',role:r,fontSize:16});sv(K.walawi,d);
+  const d=ld(K.walawi,[]);d.push({time:t,name:n,subs:[],role:r,fontSize:16});sv(K.walawi,d);
   document.getElementById('w-t').value='';document.getElementById('w-n').value='';document.getElementById('w-r').value='';
   renderW();showToast('&#9989; Row added!','success');
 }
@@ -2746,7 +2748,7 @@ function renderK(){
       </td>
       <td style="vertical-align:middle;width:100%;">
         <strong style="font-size:${fs}px;line-height:1.4;">${esc(r.act)}</strong>
-        ${r.sub?`<br><span style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-mid);font-weight:600;">${esc(r.sub)}</span>`:''}
+        ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map(s=>`<br><span style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-mid);font-weight:600;">${esc(s)}</span>`).join('')}
         ${r.lead?`<br><span style="font-size:${Math.max(fs-3,11)}px;color:var(--text-light);">${esc(r.lead)}</span>`:''}
       </td>
       ${can?`<td style="width:36px;"><button class="btn-del" onclick="delKRow(${i})">&#10005;</button></td>`:''}
@@ -2756,7 +2758,7 @@ function renderK(){
 function addKRow(){
   const t=document.getElementById('k-t').value.trim(),a=document.getElementById('k-a').value.trim(),l=document.getElementById('k-l').value.trim();
   if(!a)return showToast('Fill Activity','error');
-  const d=ld(K.kawaida,[]);d.push({time:t,act:a,sub:'',lead:l,fontSize:16});sv(K.kawaida,d);
+  const d=ld(K.kawaida,[]);d.push({time:t,act:a,subs:[],lead:l,fontSize:16});sv(K.kawaida,d);
   document.getElementById('k-t').value='';document.getElementById('k-a').value='';document.getElementById('k-l').value='';
   renderK();showToast('&#9989; Row added!','success');
 }
@@ -3005,8 +3007,9 @@ function renderAW(){
       <td style="padding:12px 8px;vertical-align:top;">
         <div class="row-field-label" style="margin-bottom:4px;">Jina / Name</div>
         <input class="row-edit-input" value="${esc(r.name)}" placeholder="Jina / Name" onchange="saveWField(${i},'name',this.value)"/>
-        <div class="row-field-label" style="margin:8px 0 4px;">Sub-name (line 2)</div>
-        <input class="row-edit-input" value="${esc(r.sub||'')}" placeholder="Sub-name (optional)" onchange="saveWField(${i},'sub',this.value)"/>
+        <div class="row-field-label" style="margin:8px 0 4px;">Sub-lines <span style="font-weight:400;opacity:0.6;">(optional — add as many as needed)</span></div>
+        <div id="w-subs-${i}">${(()=>{const subs=Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);return subs.map((s,si)=>`<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;"><input class="row-edit-input" style="flex:1;margin:0;" value="${esc(s)}" placeholder="Sub-line ${si+1}" onchange="saveWSubLine(${i},${si},this.value)"/><button onclick="removeWSubLine(${i},${si})" style="width:30px;height:30px;flex-shrink:0;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button></div>`).join('');})()}</div>
+        <button onclick="addWSubLine(${i})" style="margin-top:3px;padding:5px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:6px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">＋ Add sub-line</button>
         <div class="row-field-label" style="margin:8px 0 4px;">Role / Kazi</div>
         <input class="row-edit-input" value="${esc(r.role||'')}" placeholder="Role (optional)" onchange="saveWField(${i},'role',this.value)"/>
         <div class="row-field-label" style="margin:8px 0 4px;">Wakati / Time</div>
@@ -3023,10 +3026,26 @@ function renderAW(){
   }).join('');
 }
 function saveWField(i,f,v){const d=ld(K.walawi,[]);if(!d[i])return;d[i][f]=v;sv(K.walawi,d);renderW();}
+function _wSubs(r){return Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);}
+function addWSubLine(i){
+  const d=ld(K.walawi,[]);if(!d[i])return;
+  d[i].subs=_wSubs(d[i]);delete d[i].sub;
+  d[i].subs.push('');sv(K.walawi,d);renderAW();renderW();
+}
+function removeWSubLine(i,si){
+  const d=ld(K.walawi,[]);if(!d[i])return;
+  d[i].subs=_wSubs(d[i]);delete d[i].sub;
+  d[i].subs.splice(si,1);sv(K.walawi,d);renderAW();renderW();
+}
+function saveWSubLine(i,si,val){
+  const d=ld(K.walawi,[]);if(!d[i])return;
+  if(!Array.isArray(d[i].subs))d[i].subs=_wSubs(d[i]);
+  delete d[i].sub;d[i].subs[si]=val;sv(K.walawi,d);renderW();
+}
 function adminAddW(){
   const n=document.getElementById('aw-n').value.trim(); if(!n)return showToast('Fill Name','error');
   const t=document.getElementById('aw-t').value.trim(),s=document.getElementById('aw-s').value.trim(),r=document.getElementById('aw-r').value.trim();
-  const d=ld(K.walawi,[]);d.push({time:t,name:n,sub:s,role:r,fontSize:16});sv(K.walawi,d);
+  const d=ld(K.walawi,[]);d.push({time:t,name:n,subs:s?[s]:[],role:r,fontSize:16});sv(K.walawi,d);
   document.getElementById('aw-n').value='';document.getElementById('aw-s').value='';
   document.getElementById('aw-r').value='';document.getElementById('aw-t').value='';
   renderAW();renderW();showToast('&#9989; Added!','success');
@@ -3050,8 +3069,9 @@ function renderAK(){
       <td style="padding:12px 8px;vertical-align:top;">
         <div class="row-field-label" style="margin-bottom:4px;">Shughuli / Activity</div>
         <input class="row-edit-input" value="${esc(r.act)}" placeholder="Shughuli / Activity" onchange="saveKField(${i},'act',this.value)"/>
-        <div class="row-field-label" style="margin:8px 0 4px;">Sub-name (line 2)</div>
-        <input class="row-edit-input" value="${esc(r.sub||'')}" placeholder="Sub-name (optional)" onchange="saveKField(${i},'sub',this.value)"/>
+        <div class="row-field-label" style="margin:8px 0 4px;">Sub-lines <span style="font-weight:400;opacity:0.6;">(optional — add as many as needed)</span></div>
+        <div id="k-subs-${i}">${(()=>{const subs=Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);return subs.map((s,si)=>`<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;"><input class="row-edit-input" style="flex:1;margin:0;" value="${esc(s)}" placeholder="Sub-line ${si+1}" onchange="saveKSubLine(${i},${si},this.value)"/><button onclick="removeKSubLine(${i},${si})" style="width:30px;height:30px;flex-shrink:0;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button></div>`).join('');})()}</div>
+        <button onclick="addKSubLine(${i})" style="margin-top:3px;padding:5px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:6px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">＋ Add sub-line</button>
         <div class="row-field-label" style="margin:8px 0 4px;">Kiongozi / Leader</div>
         <input class="row-edit-input" value="${esc(r.lead||'')}" placeholder="Leader (optional)" onchange="saveKField(${i},'lead',this.value)"/>
         <div class="row-field-label" style="margin:8px 0 4px;">Wakati / Time</div>
@@ -3068,10 +3088,26 @@ function renderAK(){
   }).join('');
 }
 function saveKField(i,f,v){const d=ld(K.kawaida,[]);if(!d[i])return;d[i][f]=v;sv(K.kawaida,d);renderK();}
+function _kSubs(r){return Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);}
+function addKSubLine(i){
+  const d=ld(K.kawaida,[]);if(!d[i])return;
+  d[i].subs=_kSubs(d[i]);delete d[i].sub;
+  d[i].subs.push('');sv(K.kawaida,d);renderAK();renderK();
+}
+function removeKSubLine(i,si){
+  const d=ld(K.kawaida,[]);if(!d[i])return;
+  d[i].subs=_kSubs(d[i]);delete d[i].sub;
+  d[i].subs.splice(si,1);sv(K.kawaida,d);renderAK();renderK();
+}
+function saveKSubLine(i,si,val){
+  const d=ld(K.kawaida,[]);if(!d[i])return;
+  if(!Array.isArray(d[i].subs))d[i].subs=_kSubs(d[i]);
+  delete d[i].sub;d[i].subs[si]=val;sv(K.kawaida,d);renderK();
+}
 function adminAddK(){
   const a=document.getElementById('ak-a').value.trim(); if(!a)return showToast('Fill Activity','error');
   const t=document.getElementById('ak-t').value.trim(),s=document.getElementById('ak-s').value.trim(),l=document.getElementById('ak-l').value.trim();
-  const d=ld(K.kawaida,[]);d.push({time:t,act:a,sub:s,lead:l,fontSize:16});sv(K.kawaida,d);
+  const d=ld(K.kawaida,[]);d.push({time:t,act:a,subs:s?[s]:[],lead:l,fontSize:16});sv(K.kawaida,d);
   document.getElementById('ak-a').value='';document.getElementById('ak-s').value='';
   document.getElementById('ak-l').value='';document.getElementById('ak-t').value='';
   renderAK();renderK();showToast('&#9989; Added!','success');
