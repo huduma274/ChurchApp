@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -1497,6 +1499,21 @@ html, body {
                   <button class="dsr-btn" onclick="changeSetting('titleWFontSize',1)">+</button>
                 </div>
               </div>
+              <div class="display-setting-row" id="dsr-subClrW">
+                <div class="dsr-label"><span class="dsr-icon">&#128203;</span>
+                  <div>
+                    <div class="dsr-title">Ratiba ya Walawi &#8212; Sub-line Color</div>
+                    <div style="font-size:0.72rem;color:var(--text-light);">Color of sub-text lines (names, roles)</div>
+                  </div>
+                </div>
+                <div class="dsr-controls" style="gap:8px;">
+                  <input type="color" id="dsr-color-subW" value="#1a3a8f"
+                    style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:none;"
+                    oninput="saveColorSetting('subLineColorW',this.value);renderW();"
+                    onchange="saveColorSetting('subLineColorW',this.value);renderW();"/>
+                  <button class="dsr-btn" onclick="saveColorSetting('subLineColorW','#1a3a8f');document.getElementById('dsr-color-subW').value='#1a3a8f';renderW();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
+                </div>
+              </div>
               <div class="display-setting-row" id="dsr-titleK">
                 <div class="dsr-label"><span class="dsr-icon">&#128467;&#65039;</span>
                   <div><div class="dsr-title">Ratiba ya Kawaida &#8212; Title</div><div class="dsr-preview" id="dsr-prev-titleK">Preview</div></div>
@@ -1505,6 +1522,21 @@ html, body {
                   <button class="dsr-btn" onclick="changeSetting('titleKFontSize',-1)">&#8722;</button>
                   <span class="dsr-val" id="dsr-val-titleK">20px</span>
                   <button class="dsr-btn" onclick="changeSetting('titleKFontSize',1)">+</button>
+                </div>
+              </div>
+              <div class="display-setting-row" id="dsr-subClrK">
+                <div class="dsr-label"><span class="dsr-icon">&#128467;&#65039;</span>
+                  <div>
+                    <div class="dsr-title">Ratiba ya Kawaida &#8212; Sub-line Color</div>
+                    <div style="font-size:0.72rem;color:var(--text-light);">Color of sub-text lines (descriptions)</div>
+                  </div>
+                </div>
+                <div class="dsr-controls" style="gap:8px;">
+                  <input type="color" id="dsr-color-subK" value="#1a3a8f"
+                    style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:none;"
+                    oninput="saveColorSetting('subLineColorK',this.value);renderK();"
+                    onchange="saveColorSetting('subLineColorK',this.value);renderK();"/>
+                  <button class="dsr-btn" onclick="saveColorSetting('subLineColorK','#1a3a8f');document.getElementById('dsr-color-subK').value='#1a3a8f';renderK();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
                 </div>
               </div>
               <div class="display-setting-row" id="dsr-titleU">
@@ -2329,9 +2361,11 @@ const DEF_SETTINGS = {
   titleWFontSize: 20, titleKFontSize: 20, titleUFontSize: 20, testimonyFontSize: 18,
   showRowNumbers: true,
   titleWText: 'Ratiba ya Walawi', titleKText: 'Ratiba ya Kawaida', titleUText: 'Majina ya Ushuhuda',
+  subLineColorW: '#1a3a8f', subLineColorK: '#1a3a8f',
 };
 function getSettings(){ return Object.assign({}, DEF_SETTINGS, ld(K.settings, {})); }
 function saveSetting(key, val){ const s=getSettings(); s[key]=val; sv(K.settings,s); }
+function saveColorSetting(key, val){ saveSetting(key, val); }
 function saveSectionTitle(key, val){
   saveSetting(key, val.trim() || DEF_SETTINGS[key]);
   renderW(); renderK(); renderNames();
@@ -2814,6 +2848,7 @@ function renderW(){
   const data=ld(K.walawi,DW);
   const can=CU&&(CU.role==='super'||CU.permissions.walawi);
   const cfg=getSettings();
+  const subClrW = cfg.subLineColorW || DEF_SETTINGS.subLineColorW;
   const th=document.querySelector('#panel-walawi .card-hdr h2');
   if(th){ th.style.fontSize=cfg.titleWFontSize+'px'; th.textContent=cfg.titleWText||DEF_SETTINGS.titleWText; }
   document.getElementById('w-tbody').innerHTML=data.map((r,i)=>{
@@ -2827,7 +2862,7 @@ function renderW(){
       </td>
       <td style="vertical-align:middle;width:100%;">
         <strong style="font-size:${fs}px;line-height:1.4;">${esc(r.name)}</strong>
-        ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map(s=>`<br><span style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-mid);font-weight:600;">${esc(s)}</span>`).join('')}
+        ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map((s,si)=>{const c=(r.subColors&&r.subColors[si])||subClrW;return `<br><span style="font-size:${Math.max(fs-2,12)}px;color:${c};font-weight:600;">${esc(s)}</span>`;}).join('')}
         ${r.role?`<br><span style="font-size:${Math.max(fs-3,11)}px;color:var(--text-light);">${esc(r.role)}</span>`:''}
       </td>
       ${can?`<td style="width:36px;"><button class="btn-del" onclick="delWRow(${i})">&#10005;</button></td>`:''}
@@ -2846,10 +2881,21 @@ function renderK(){
   const data=ld(K.kawaida,DK);
   const can=CU&&(CU.role==='super'||CU.permissions.kawaida);
   const cfg=getSettings();
+  const subClrK = cfg.subLineColorK || DEF_SETTINGS.subLineColorK;
   const th=document.querySelector('#panel-kawaida .card-hdr h2');
   if(th){ th.style.fontSize=cfg.titleKFontSize+'px'; th.textContent=cfg.titleKText||DEF_SETTINGS.titleKText; }
   document.getElementById('k-tbody').innerHTML=data.map((r,i)=>{
     const fs=r.fontSize||16; const num=i+1;
+    const isUshuhuda = /ushuhuda/i.test(r.act||'');
+    const cellStyle = isUshuhuda
+      ? 'vertical-align:middle;width:100%;cursor:pointer;'
+      : 'vertical-align:middle;width:100%;';
+    const clickAttr = isUshuhuda
+      ? `onclick="switchTab('ushuhuda')" title="Fungua Majina ya Ushuhuda"`
+      : '';
+    const actHtml = isUshuhuda
+      ? `<strong style="font-size:${fs}px;line-height:1.4;color:var(--blue-bright);text-decoration:underline dotted 2px;">${esc(r.act)}&nbsp;🎤</strong>`
+      : `<strong style="font-size:${fs}px;line-height:1.4;">${esc(r.act)}</strong>`;
     return `<tr>
       <td style="vertical-align:middle;text-align:center;width:32px;padding-right:6px;">
         <span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;background:var(--blue-mid);color:white;border-radius:50%;font-size:11px;font-weight:800;">${num}</span>
@@ -2857,12 +2903,12 @@ function renderK(){
       <td style="vertical-align:middle;white-space:nowrap;padding-right:10px;min-width:80px;">
         ${r.time?`<span class="pill" style="font-size:${Math.max(fs-3,11)}px;">${esc(r.time)}</span>`:''}
       </td>
-      <td style="vertical-align:middle;width:100%;">
-        <strong style="font-size:${fs}px;line-height:1.4;">${esc(r.act)}</strong>
-        ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map(s=>`<br><span style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-mid);font-weight:600;">${esc(s)}</span>`).join('')}
+      <td style="${cellStyle}" ${clickAttr}>
+        ${actHtml}
+        ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map((s,si)=>{const c=(r.subColors&&r.subColors[si])||subClrK;return `<br><span style="font-size:${Math.max(fs-2,12)}px;color:${c};font-weight:600;">${esc(s)}</span>`;}).join('')}
         ${r.lead?`<br><span style="font-size:${Math.max(fs-3,11)}px;color:var(--text-light);">${esc(r.lead)}</span>`:''}
       </td>
-      ${can?`<td style="width:36px;"><button class="btn-del" onclick="delKRow(${i})">&#10005;</button></td>`:''}
+      ${can?`<td style="width:36px;"><button class="btn-del" onclick="event.stopPropagation();delKRow(${i})">&#10005;</button></td>`:''}
     </tr>`;
   }).join('');
 }
@@ -3019,6 +3065,11 @@ function renderDisplaySettings(){
     if(valEl) valEl.textContent=val+'px';
     if(prevEl){prevEl.textContent=DSR_LABELS[key];prevEl.style.fontSize=val+'px';}
   });
+  // Sync color pickers
+  const pickerW = document.getElementById('dsr-color-subW');
+  const pickerK = document.getElementById('dsr-color-subK');
+  if(pickerW) pickerW.value = cfg.subLineColorW || DEF_SETTINGS.subLineColorW;
+  if(pickerK) pickerK.value = cfg.subLineColorK || DEF_SETTINGS.subLineColorK;
 }
 function changeSetting(key,delta){
   const cfg=getSettings(); const lim=DSR_LIMITS[key]||{min:10,max:48};
@@ -3119,7 +3170,7 @@ function renderAW(){
         <div class="row-field-label" style="margin-bottom:4px;">Jina / Name</div>
         <input class="row-edit-input" value="${esc(r.name)}" placeholder="Jina / Name" onchange="saveWField(${i},'name',this.value)"/>
         <div class="row-field-label" style="margin:8px 0 4px;">Sub-lines <span style="font-weight:400;opacity:0.6;">(optional — add as many as needed)</span></div>
-        <div id="w-subs-${i}">${(()=>{const subs=Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);return subs.map((s,si)=>`<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;"><input class="row-edit-input" style="flex:1;margin:0;" value="${esc(s)}" placeholder="Sub-line ${si+1}" onchange="saveWSubLine(${i},${si},this.value)"/><button onclick="removeWSubLine(${i},${si})" style="width:30px;height:30px;flex-shrink:0;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button></div>`).join('');})()}</div>
+        <div id="w-subs-${i}">${(()=>{const subs=Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);const clrs=Array.isArray(r.subColors)?r.subColors:[];const globalClr=getSettings().subLineColorW||DEF_SETTINGS.subLineColorW;return subs.map((s,si)=>{const c=clrs[si]||globalClr;return `<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;"><input class="row-edit-input" style="flex:1;margin:0;" value="${esc(s)}" placeholder="Sub-line ${si+1}" onchange="saveWSubLine(${i},${si},this.value)"/><input type="color" value="${c}" title="Sub-line color" style="width:30px;height:30px;flex-shrink:0;border:1.5px solid #93c5fd;border-radius:5px;cursor:pointer;padding:2px;" oninput="saveWSubColor(${i},${si},this.value)" onchange="saveWSubColor(${i},${si},this.value)"/><button onclick="removeWSubLine(${i},${si})" style="width:30px;height:30px;flex-shrink:0;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button></div>`;}).join('');})()}</div>
         <button onclick="addWSubLine(${i})" style="margin-top:3px;padding:5px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:6px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">＋ Add sub-line</button>
         <div class="row-field-label" style="margin:8px 0 4px;">Role / Kazi</div>
         <input class="row-edit-input" value="${esc(r.role||'')}" placeholder="Role (optional)" onchange="saveWField(${i},'role',this.value)"/>
@@ -3146,12 +3197,19 @@ function addWSubLine(i){
 function removeWSubLine(i,si){
   const d=ld(K.walawi,[]);if(!d[i])return;
   d[i].subs=_wSubs(d[i]);delete d[i].sub;
-  d[i].subs.splice(si,1);sv(K.walawi,d);renderAW();renderW();
+  d[i].subs.splice(si,1);
+  if(Array.isArray(d[i].subColors)) d[i].subColors.splice(si,1);
+  sv(K.walawi,d);renderAW();renderW();
 }
 function saveWSubLine(i,si,val){
   const d=ld(K.walawi,[]);if(!d[i])return;
   if(!Array.isArray(d[i].subs))d[i].subs=_wSubs(d[i]);
   delete d[i].sub;d[i].subs[si]=val;sv(K.walawi,d);renderW();
+}
+function saveWSubColor(i,si,color){
+  const d=ld(K.walawi,[]);if(!d[i])return;
+  if(!Array.isArray(d[i].subColors)) d[i].subColors=[];
+  d[i].subColors[si]=color;sv(K.walawi,d);renderW();
 }
 function adminAddW(){
   const n=document.getElementById('aw-n').value.trim(); if(!n)return showToast('Fill Name','error');
@@ -3181,7 +3239,7 @@ function renderAK(){
         <div class="row-field-label" style="margin-bottom:4px;">Shughuli / Activity</div>
         <input class="row-edit-input" value="${esc(r.act)}" placeholder="Shughuli / Activity" onchange="saveKField(${i},'act',this.value)"/>
         <div class="row-field-label" style="margin:8px 0 4px;">Sub-lines <span style="font-weight:400;opacity:0.6;">(optional — add as many as needed)</span></div>
-        <div id="k-subs-${i}">${(()=>{const subs=Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);return subs.map((s,si)=>`<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;"><input class="row-edit-input" style="flex:1;margin:0;" value="${esc(s)}" placeholder="Sub-line ${si+1}" onchange="saveKSubLine(${i},${si},this.value)"/><button onclick="removeKSubLine(${i},${si})" style="width:30px;height:30px;flex-shrink:0;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button></div>`).join('');})()}</div>
+        <div id="k-subs-${i}">${(()=>{const subs=Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);const clrs=Array.isArray(r.subColors)?r.subColors:[];const globalClr=getSettings().subLineColorK||DEF_SETTINGS.subLineColorK;return subs.map((s,si)=>{const c=clrs[si]||globalClr;return `<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;"><input class="row-edit-input" style="flex:1;margin:0;" value="${esc(s)}" placeholder="Sub-line ${si+1}" onchange="saveKSubLine(${i},${si},this.value)"/><input type="color" value="${c}" title="Sub-line color" style="width:30px;height:30px;flex-shrink:0;border:1.5px solid #93c5fd;border-radius:5px;cursor:pointer;padding:2px;" oninput="saveKSubColor(${i},${si},this.value)" onchange="saveKSubColor(${i},${si},this.value)"/><button onclick="removeKSubLine(${i},${si})" style="width:30px;height:30px;flex-shrink:0;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button></div>`;}).join('');})()}</div>
         <button onclick="addKSubLine(${i})" style="margin-top:3px;padding:5px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:6px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">＋ Add sub-line</button>
         <div class="row-field-label" style="margin:8px 0 4px;">Kiongozi / Leader</div>
         <input class="row-edit-input" value="${esc(r.lead||'')}" placeholder="Leader (optional)" onchange="saveKField(${i},'lead',this.value)"/>
@@ -3208,12 +3266,19 @@ function addKSubLine(i){
 function removeKSubLine(i,si){
   const d=ld(K.kawaida,[]);if(!d[i])return;
   d[i].subs=_kSubs(d[i]);delete d[i].sub;
-  d[i].subs.splice(si,1);sv(K.kawaida,d);renderAK();renderK();
+  d[i].subs.splice(si,1);
+  if(Array.isArray(d[i].subColors)) d[i].subColors.splice(si,1);
+  sv(K.kawaida,d);renderAK();renderK();
 }
 function saveKSubLine(i,si,val){
   const d=ld(K.kawaida,[]);if(!d[i])return;
   if(!Array.isArray(d[i].subs))d[i].subs=_kSubs(d[i]);
   delete d[i].sub;d[i].subs[si]=val;sv(K.kawaida,d);renderK();
+}
+function saveKSubColor(i,si,color){
+  const d=ld(K.kawaida,[]);if(!d[i])return;
+  if(!Array.isArray(d[i].subColors)) d[i].subColors=[];
+  d[i].subColors[si]=color;sv(K.kawaida,d);renderK();
 }
 function adminAddK(){
   const a=document.getElementById('ak-a').value.trim(); if(!a)return showToast('Fill Activity','error');
