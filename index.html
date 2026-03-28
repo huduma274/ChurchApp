@@ -884,7 +884,7 @@ html, body {
               <div class="add-row">
                 <input type="text" id="k-t" placeholder="Time" style="max-width:110px;"/>
                 <input type="text" id="k-a" placeholder="Shughuli / Activity"/>
-                <input type="text" id="k-l" placeholder="Kiongozi / Leader"/>
+                <input type="text" id="k-l" placeholder="WAKATI / TIME"/>
                 <button class="btn-sm" onclick="addKRow()">+ Add</button>
               </div>
             </div>
@@ -904,6 +904,30 @@ html, body {
             <ul class="names-list" id="u-list"></ul>
             <div class="empty" id="u-empty"><span class="eico">🎤</span>Hakuna majina bado.<br>No names yet.</div>
             <div class="last-upd" id="u-upd"></div>
+          </div>
+        </div>
+      </div>
+      <div class="tab-panel" id="panel-matangazo">
+        <div class="card">
+          <div class="card-hdr"><span>📢</span><h2>Matangazo</h2><span class="badge">Live</span></div>
+          <div class="card-body">
+            <!-- PIN Gate -->
+            <div id="m-pin-gate" style="display:none;flex-direction:column;align-items:center;justify-content:center;padding:40px 20px;gap:16px;">
+              <span style="font-size:2.5rem;">🔒</span>
+              <div style="font-size:1rem;font-weight:700;color:var(--text-main);text-align:center;">Ingiza PIN kuona Matangazo<br><span style="font-size:0.78rem;font-weight:400;color:var(--text-light);">Enter PIN to view announcements</span></div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="password" id="m-pin-inp" placeholder="PIN" maxlength="1" style="width:60px;text-align:center;font-size:1.4rem;font-weight:800;padding:10px;border:2px solid var(--border);border-radius:10px;letter-spacing:4px;"
+                  onkeydown="if(event.key==='Enter')submitMatangazoPin()"/>
+                <button class="btn-sm" style="padding:10px 18px;font-size:0.9rem;" onclick="submitMatangazoPin()">🔓 Fungua</button>
+              </div>
+            </div>
+            <!-- Content (hidden behind PIN) -->
+            <div id="m-content">
+              <div class="live-bar"><div class="live-dot"></div>Inasasishwa moja kwa moja — Live every 5 sec</div>
+              <ol class="names-list" id="m-list" style="list-style:none;padding:0;margin:0;"></ol>
+              <div class="empty" id="m-empty"><span class="eico">📢</span>Hakuna matangazo bado.<br>No announcements yet.</div>
+              <div class="last-upd" id="m-upd"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1404,6 +1428,7 @@ html, body {
   <div class="admin-subnav">
     <button class="atn active" id="atn-schedules" onclick="switchATab('schedules')">&#128203; Schedules</button>
     <button class="atn" id="atn-testimony" onclick="switchATab('testimony')">&#127908; Testimony</button>
+    <button class="atn" id="atn-matangazo" onclick="switchATab('matangazo')">📢 Matangazo</button>
     <button class="atn" id="atn-display" onclick="switchATab('display');renderDisplaySettings()">&#128289; Display</button>
     <button class="atn" id="atn-branding" onclick="switchATab('branding');renderBrandingPanel()" style="display:none;">&#127912; Branding</button>
     <button class="atn" id="atn-menus" onclick="switchATab('menus');renderMenuManager()" style="display:none;">&#128203; Menu Manager</button>
@@ -1473,7 +1498,7 @@ html, body {
               <div style="display:flex;flex-direction:column;gap:8px;">
                 <input class="field-input" type="text" id="ak-a" placeholder="Shughuli / Activity (required)"/>
                 <input class="field-input" type="text" id="ak-s" placeholder="Sub-name / Maelezo (optional)"/>
-                <input class="field-input" type="text" id="ak-l" placeholder="Kiongozi / Leader (optional)"/>
+                <input class="field-input" type="text" id="ak-l" placeholder="WAKATI / TIME (optional)"/>
                 <input class="field-input" type="text" id="ak-t" placeholder="Wakati / Time (optional)"/>
                 <button class="btn-sm" style="width:100%;" onclick="adminAddK()">+ Add Row</button>
               </div>
@@ -1512,6 +1537,21 @@ html, body {
                   <button class="dsr-btn" onclick="saveColorSetting('subLineColorW','#1a3a8f');document.getElementById('dsr-color-subW').value='#1a3a8f';renderW();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
                 </div>
               </div>
+              <div class="display-setting-row" id="dsr-nameClrW">
+                <div class="dsr-label"><span class="dsr-icon">&#128203;</span>
+                  <div>
+                    <div class="dsr-title">Ratiba ya Walawi &#8212; Title Name Color</div>
+                    <div style="font-size:0.72rem;color:var(--text-light);">Color of activity/title names (e.g. Maombi Ya Ufunguzi)</div>
+                  </div>
+                </div>
+                <div class="dsr-controls" style="gap:8px;">
+                  <input type="color" id="dsr-color-nameW" value="#000000"
+                    style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:none;"
+                    oninput="saveColorSetting('nameColorW',this.value);renderW();"
+                    onchange="saveColorSetting('nameColorW',this.value);renderW();"/>
+                  <button class="dsr-btn" onclick="saveColorSetting('nameColorW','#000000');document.getElementById('dsr-color-nameW').value='#000000';renderW();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
+                </div>
+              </div>
               <div class="display-setting-row" id="dsr-titleK">
                 <div class="dsr-label"><span class="dsr-icon">&#128467;&#65039;</span>
                   <div><div class="dsr-title">Ratiba ya Kawaida &#8212; Title</div><div class="dsr-preview" id="dsr-prev-titleK">Preview</div></div>
@@ -1537,6 +1577,36 @@ html, body {
                   <button class="dsr-btn" onclick="saveColorSetting('subLineColorK','#1a3a8f');document.getElementById('dsr-color-subK').value='#1a3a8f';renderK();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
                 </div>
               </div>
+              <div class="display-setting-row" id="dsr-nameClrK">
+                <div class="dsr-label"><span class="dsr-icon">&#128467;&#65039;</span>
+                  <div>
+                    <div class="dsr-title">Ratiba ya Kawaida &#8212; Title Name Color</div>
+                    <div style="font-size:0.72rem;color:var(--text-light);">Color of activity/title names (e.g. Ushuhuda, Kwaya)</div>
+                  </div>
+                </div>
+                <div class="dsr-controls" style="gap:8px;">
+                  <input type="color" id="dsr-color-nameK" value="#000000"
+                    style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:none;"
+                    oninput="saveColorSetting('nameColorK',this.value);renderK();"
+                    onchange="saveColorSetting('nameColorK',this.value);renderK();"/>
+                  <button class="dsr-btn" onclick="saveColorSetting('nameColorK','#000000');document.getElementById('dsr-color-nameK').value='#000000';renderK();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
+                </div>
+              </div>
+              <div class="display-setting-row" id="dsr-actHdrClrK">
+                <div class="dsr-label"><span class="dsr-icon">&#128467;&#65039;</span>
+                  <div>
+                    <div class="dsr-title">Ratiba ya Kawaida &#8212; Shughuli/Activity Header Color</div>
+                    <div style="font-size:0.72rem;color:var(--text-light);">Color of the Shughuli / Activity column header</div>
+                  </div>
+                </div>
+                <div class="dsr-controls" style="gap:8px;">
+                  <input type="color" id="dsr-color-actHdrK" value="#ffffff"
+                    style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:none;"
+                    oninput="saveColorSetting('activityHeaderColorK',this.value);loadHeaders();"
+                    onchange="saveColorSetting('activityHeaderColorK',this.value);loadHeaders();"/>
+                  <button class="dsr-btn" onclick="saveColorSetting('activityHeaderColorK','#ffffff');document.getElementById('dsr-color-actHdrK').value='#ffffff';loadHeaders();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
+                </div>
+              </div>
               <div class="display-setting-row" id="dsr-titleU">
                 <div class="dsr-label"><span class="dsr-icon">&#127908;</span>
                   <div><div class="dsr-title">Majina ya Ushuhuda &#8212; Title</div><div class="dsr-preview" id="dsr-prev-titleU">Preview</div></div>
@@ -1555,6 +1625,46 @@ html, body {
                   <button class="dsr-btn" onclick="changeSetting('testimonyFontSize',-1)">&#8722;</button>
                   <span class="dsr-val" id="dsr-val-testimony">18px</span>
                   <button class="dsr-btn" onclick="changeSetting('testimonyFontSize',1)">+</button>
+                </div>
+              </div>
+              <div class="display-setting-row" id="dsr-titleM">
+                <div class="dsr-label"><span class="dsr-icon">📢</span>
+                  <div><div class="dsr-title">Matangazo &#8212; Title</div><div class="dsr-preview" id="dsr-prev-titleM">Preview</div></div>
+                </div>
+                <div class="dsr-controls">
+                  <button class="dsr-btn" onclick="changeSetting('titleMFontSize',-1)">&#8722;</button>
+                  <span class="dsr-val" id="dsr-val-titleM">20px</span>
+                  <button class="dsr-btn" onclick="changeSetting('titleMFontSize',1)">+</button>
+                </div>
+              </div>
+              <div class="display-setting-row" id="dsr-subClrM">
+                <div class="dsr-label"><span class="dsr-icon">📢</span>
+                  <div>
+                    <div class="dsr-title">Matangazo &#8212; Sub-line Color</div>
+                    <div style="font-size:0.72rem;color:var(--text-light);">Color of sub-text lines (descriptions)</div>
+                  </div>
+                </div>
+                <div class="dsr-controls" style="gap:8px;">
+                  <input type="color" id="dsr-color-subM" value="#1a3a8f"
+                    style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:none;"
+                    oninput="saveColorSetting('subLineColorM',this.value);renderMatangazo();"
+                    onchange="saveColorSetting('subLineColorM',this.value);renderMatangazo();"/>
+                  <button class="dsr-btn" onclick="saveColorSetting('subLineColorM','#1a3a8f');document.getElementById('dsr-color-subM').value='#1a3a8f';renderMatangazo();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
+                </div>
+              </div>
+              <div class="display-setting-row" id="dsr-nameClrM">
+                <div class="dsr-label"><span class="dsr-icon">📢</span>
+                  <div>
+                    <div class="dsr-title">Matangazo &#8212; Title Name Color</div>
+                    <div style="font-size:0.72rem;color:var(--text-light);">Color of announcement titles</div>
+                  </div>
+                </div>
+                <div class="dsr-controls" style="gap:8px;">
+                  <input type="color" id="dsr-color-nameM" value="#000000"
+                    style="width:36px;height:36px;border:none;border-radius:8px;cursor:pointer;padding:2px;background:none;"
+                    oninput="saveColorSetting('nameColorM',this.value);renderMatangazo();"
+                    onchange="saveColorSetting('nameColorM',this.value);renderMatangazo();"/>
+                  <button class="dsr-btn" onclick="saveColorSetting('nameColorM','#000000');document.getElementById('dsr-color-nameM').value='#000000';renderMatangazo();" title="Reset to default" style="font-size:0.7rem;padding:4px 8px;">&#8634;</button>
                 </div>
               </div>
             </div>
@@ -1587,6 +1697,43 @@ html, body {
             <div class="empty" id="an-empty"><span class="eico">&#127908;</span>Hakuna majina bado.</div>
             <div style="margin-top:13px;text-align:right;">
               <button class="btn-dang" onclick="confirmClear()">&#128465;&#65039; Clear All Names</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="admin-panel" id="ap-matangazo">
+        <div class="card">
+          <div class="card-hdr"><span>📢</span><h2>Matangazo</h2><span class="badge">Live Edit</span></div>
+          <div class="card-body">
+            <div style="background:var(--blue-pale);border-radius:11px;padding:12px 14px;margin-bottom:14px;border:1.5px solid var(--border);">
+              <div class="row-field-label" style="margin-bottom:5px;">&#9999;&#65039; Section Title (shown on live page)</div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input class="row-edit-input" id="title-m-input" placeholder="Matangazo"
+                  style="font-family:'Cinzel',serif;font-weight:700;font-size:1rem;"
+                  onchange="saveSectionTitle('titleMText',this.value)"/>
+                <button class="btn-sm" onclick="resetSectionTitle('titleMText','title-m-input')">&#8634;</button>
+              </div>
+            </div>
+            <div style="background:#fef3c7;border:1.5px solid #fde68a;border-radius:11px;padding:12px 14px;margin-bottom:14px;">
+              <div class="row-field-label" style="margin-bottom:5px;">🔒 PIN Protection (1 digit, required for non-Super users)</div>
+              <div style="display:flex;gap:8px;align-items:center;">
+                <input type="text" id="matangazo-pin-input" placeholder="PIN (1 digit)" maxlength="1" style="width:80px;text-align:center;font-size:1.2rem;font-weight:800;padding:8px;border:2px solid #fde68a;border-radius:8px;letter-spacing:2px;"
+                  onchange="saveSetting('matangazoPin',this.value.trim());showToast('🔒 PIN saved','success');"/>
+                <button class="btn-sm" style="font-size:0.78rem;" onclick="saveSetting('matangazoPin','');document.getElementById('matangazo-pin-input').value='';showToast('🔓 PIN removed — open to all','success');">Remove PIN</button>
+                <span style="font-size:0.72rem;color:#92400e;font-weight:600;">Super Admins bypass PIN</span>
+              </div>
+            </div>
+            <div class="live-bar"><div class="live-dot"></div>Changes appear on stage within 5 seconds</div>
+            <div class="name-form">
+              <input type="text" id="am-inp" placeholder="Andika tangazo / Enter announcement..." maxlength="120"
+                onkeydown="if(event.key==='Enter')adminAddMatangazo()"/>
+              <input type="text" id="am-sub" placeholder="Maelezo / Sub-line (optional)" maxlength="120"/>
+              <button class="btn-add" onclick="adminAddMatangazo()">+ Ongeza / Add</button>
+            </div>
+            <ul class="names-list" id="am-list"></ul>
+            <div class="empty" id="am-empty"><span class="eico">📢</span>Hakuna matangazo bado.</div>
+            <div style="margin-top:13px;text-align:right;">
+              <button class="btn-dang" onclick="confirmClearMatangazo()">&#128465;&#65039; Clear All Matangazo</button>
             </div>
           </div>
         </div>
@@ -1793,6 +1940,7 @@ html, body {
               <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">📋 Ratiba ya Walawi</span><label class="toggle"><input type="checkbox" id="toggle-walawi" onchange="_toggleDefaultMenu('walawi',this.checked)"/><span class="tog-slider"></span></label></div>
               <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">🗓️ Ratiba ya Kawaida</span><label class="toggle"><input type="checkbox" id="toggle-kawaida" onchange="_toggleDefaultMenu('kawaida',this.checked)"/><span class="tog-slider"></span></label></div>
               <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">🎤 Majina ya Ushuhuda</span><label class="toggle"><input type="checkbox" id="toggle-ushuhuda" onchange="_toggleDefaultMenu('ushuhuda',this.checked)"/><span class="tog-slider"></span></label></div>
+              <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">📢 Matangazo</span><label class="toggle"><input type="checkbox" id="toggle-matangazo" onchange="_toggleDefaultMenu('matangazo',this.checked)"/><span class="tog-slider"></span></label></div>
             </div>
 
             <!-- Special Event toggle -->
@@ -1872,6 +2020,7 @@ html, body {
               <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">Edit Ratiba ya Walawi</span><label class="toggle"><input type="checkbox" id="p-w" checked/><span class="tog-slider"></span></label></div>
               <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">Edit Ratiba ya Kawaida</span><label class="toggle"><input type="checkbox" id="p-k" checked/><span class="tog-slider"></span></label></div>
               <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">Edit Majina ya Ushuhuda</span><label class="toggle"><input type="checkbox" id="p-u" checked/><span class="tog-slider"></span></label></div>
+              <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">📢 Edit Matangazo</span><label class="toggle"><input type="checkbox" id="p-m" checked/><span class="tog-slider"></span></label></div>
               <div class="perm-row" style="margin-top:6px;padding-top:8px;border-top:1px solid var(--border);"><span style="font-size:0.85rem;font-weight:700;">📌 Send Notes to Service Leader</span><label class="toggle"><input type="checkbox" id="p-notes" checked/><span class="tog-slider"></span></label></div>
               <div class="perm-row"><span style="font-size:0.85rem;font-weight:700;">📥 Receive Notes (Service Leader)</span><label class="toggle"><input type="checkbox" id="p-receive"/><span class="tog-slider"></span></label></div>
             </div>
@@ -2183,7 +2332,7 @@ html, body {
             <div class="add-row" style="margin-top:13px;">
               <input type="text" id="dk-t" placeholder="Time" style="max-width:105px;"/>
               <input type="text" id="dk-a" placeholder="Activity / Shughuli"/>
-              <input type="text" id="dk-l" placeholder="Leader / Kiongozi"/>
+              <input type="text" id="dk-l" placeholder="WAKATI / TIME"/>
               <button class="btn-sm" onclick="draftAddK()">+ Add</button>
             </div>
           </div>
@@ -2234,7 +2383,7 @@ const K={admins:'mom_a6',testimony:'mom_t4',walawi:'mom_w4',kawaida:'mom_k4',ses
   activityLog:'mom_activity_log',failedAttempts:'mom_failed_attempts',securityAlerts:'mom_security_alerts',
   headcount:'mom_headcount_v1',reportLog:'mom_report_log_v1',reportConfig:'mom_report_cfg_v1',
   reportTrash:'mom_report_trash_v1',
-  subDepts:'mom_subdepts_v1'};
+  subDepts:'mom_subdepts_v1',matangazo:'mom_matangazo_v1'};
 const K_TYPO         = 'mom_typography_v1';
 
 // ═══════════════════════════════════════════════════════════════
@@ -2253,6 +2402,7 @@ const FIREBASE_CONFIG = {
 };
 // Firebase database node paths
 const FB_NAMES_PATH     = 'mom-ministry/testimony/names';
+const FB_MATANGAZO_PATH = 'mom-ministry/matangazo/items';
 const FB_NOTES_PATH     = 'mom-ministry/stickyNotes';
 const FB_HEADCOUNT_PATH = 'mom-ministry/headcount';
 // Additional paths — every key here gets two-way real-time sync
@@ -2351,29 +2501,32 @@ const _FB_PATHS = {
 
 const DEF_HEADERS = {
   wh1:'Wakati / Time', wh2:'Jina / Name',    wh3:'Kazi / Role',
-  kh1:'Wakati / Time', kh2:'Shughuli / Activity', kh3:'Kiongozi / Leader',
+  kh1:'Wakati / Time', kh2:'Shughuli / Activity', kh3:'WAKATI / TIME',
   awh1:'Time',         awh2:'Name',          awh3:'Role',
-  akh1:'Time',         akh2:'Activity',       akh3:'Leader',
+  akh1:'Time',         akh2:'Activity',       akh3:'WAKATI / TIME',
 };
 const DEF_SETTINGS = {
   titleWFontSize: 20, titleKFontSize: 20, titleUFontSize: 20, testimonyFontSize: 18,
   showRowNumbers: true,
   titleWText: 'Ratiba ya Walawi', titleKText: 'Ratiba ya Kawaida', titleUText: 'Majina ya Ushuhuda',
   subLineColorW: '#1a3a8f', subLineColorK: '#1a3a8f',
+  nameColorW: '#000000', nameColorK: '#000000',
+  activityHeaderColorK: '#ffffff',
+  subLineColorM: '#1a3a8f', nameColorM: '#000000', titleMFontSize: 20, titleMText: 'Matangazo', matangazoFontSize: 16, matangazoPin: '',
 };
 function getSettings(){ return Object.assign({}, DEF_SETTINGS, ld(K.settings, {})); }
 function saveSetting(key, val){ const s=getSettings(); s[key]=val; sv(K.settings,s); }
 function saveColorSetting(key, val){ saveSetting(key, val); }
 function saveSectionTitle(key, val){
   saveSetting(key, val.trim() || DEF_SETTINGS[key]);
-  renderW(); renderK(); renderNames();
+  renderW(); renderK(); renderNames(); renderMatangazo();
   showToast('&#9989; Title updated!', 'success');
 }
 function resetSectionTitle(key, inputId){
   saveSetting(key, DEF_SETTINGS[key]);
   const el = document.getElementById(inputId);
   if(el) el.value = DEF_SETTINGS[key];
-  renderW(); renderK(); renderNames();
+  renderW(); renderK(); renderNames(); renderMatangazo();
   showToast('&#8634; Title reset', 'success');
 }
 function _populateTitleInputs(){
@@ -2381,9 +2534,13 @@ function _populateTitleInputs(){
   const tw = document.getElementById('title-w-input');
   const tk = document.getElementById('title-k-input');
   const tu = document.getElementById('title-u-input');
+  const tm = document.getElementById('title-m-input');
   if(tw) tw.value = cfg.titleWText || DEF_SETTINGS.titleWText;
   if(tk) tk.value = cfg.titleKText || DEF_SETTINGS.titleKText;
   if(tu) tu.value = cfg.titleUText || DEF_SETTINGS.titleUText;
+  if(tm) tm.value = cfg.titleMText || DEF_SETTINGS.titleMText;
+  const pinInp = document.getElementById('matangazo-pin-input');
+  if(pinInp) pinInp.value = cfg.matangazoPin || '';
 }
 const DW=[
   {time:'09:30 \u2013 09:35 AM (5MIN)',name:'MAOMBI YA UFUNGUZI',sub:'',role:'MSIMAMIZI',fontSize:16},
@@ -2396,27 +2553,33 @@ const DK=[
   {time:'10:20 \u2013 10:40 MIN',act:'KWAYA ZOTE',sub:'KWAYA YA WATOTO / KWAYA YA WAMAMA / JESHI LA WOKOVU',lead:'20 MIN MAX',fontSize:16},
   {time:'10:41 \u2013 11:00',act:'(Wimbo wa Kwaya / Choir Section)',sub:'',lead:'',fontSize:16},
   {time:'11:00 \u2013 11:10',act:'MAHUBIRI',sub:'',lead:'10 MAX',fontSize:16},
-  {time:'11:11 \u2013 11:46',act:'(Mahubiri / Sermon)',sub:'',lead:'35 MIN MAX',fontSize:16},
+  {time:'11:11 \u2013 11:46',act:'MATANGAZO YA KANISA',sub:'',lead:'35 MIN MAX',fontSize:16},
   {time:'11:50 \u2013 12:35PM',act:'MAOMBEZI',sub:'KUMKARIBISHA MCHUNGAJI KIONGOZI / MAOMBI YA KUFUNGA IBADA (MCHUNGAJI)',lead:'45 MIN',fontSize:16},
   {time:'12:36PM \u2013 12:56PM',act:'KUTOWA SADAKA (KIKUMI, SHUKURANI, NA MAYATIMA)',sub:'SIFA NA MAABUDU / MAOMBI YA KUKAMILISHA MAABUDU NA SADAKA (MCHUNGAJI)',lead:'20 MIN',fontSize:16},
   {time:'12:57 \u2013 01:00 PM',act:'MATANGAZO YA KANISA KUTOKA KWA KATIBU',sub:'',lead:'',fontSize:16},
   {time:'',act:'SALA YA BABA (WATU WOTE)',sub:'',lead:'',fontSize:16},
 ];
+const DM=[
+  {text:'MAOMBI YA CHAIN',subs:[],fontSize:16},
+  {text:'TANGAZO LA 2',subs:[],fontSize:16},
+  {text:'TANGAZO LA 3',subs:[],fontSize:16},
+  {text:'TANGAZO LA 4',subs:[],fontSize:16},
+];
 const DA=[
   {username:'grace',password:'Grace2026',displayName:'Grace',role:'super',
-   permissions:{walawi:true,kawaida:true,ushuhuda:true,sendNote:true,receiveNote:true},
+   permissions:{walawi:true,kawaida:true,ushuhuda:true,matangazo:true,sendNote:true,receiveNote:true},
    access:{enabled:true,days:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59'},
    windows:['schedules','departments','wasimamizi','church-calendar','connecthub'],departments:['ushers','financial','event','intercessors','elders']},
   {username:'eric',password:'Eric2026',displayName:'Eric',role:'super',
-   permissions:{walawi:true,kawaida:true,ushuhuda:true,sendNote:true,receiveNote:true},
+   permissions:{walawi:true,kawaida:true,ushuhuda:true,matangazo:true,sendNote:true,receiveNote:true},
    access:{enabled:true,days:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59'},
    windows:['schedules','departments','wasimamizi','church-calendar','connecthub'],departments:['ushers','financial','event','intercessors','elders']},
   {username:'Mizeituni',password:'Huduma2026',displayName:'Mizeituni',role:'regular',
-   permissions:{walawi:false,kawaida:false,ushuhuda:true,sendNote:true,receiveNote:false},
+   permissions:{walawi:false,kawaida:false,ushuhuda:true,matangazo:true,sendNote:true,receiveNote:false},
    access:{enabled:true,days:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59'},
    windows:['schedules'],departments:[]},
   {username:'Msimamizi',password:'Msimamizi2026',displayName:'Msimamizi',role:'view',
-   permissions:{walawi:false,kawaida:false,ushuhuda:false,sendNote:false,receiveNote:true},
+   permissions:{walawi:false,kawaida:false,ushuhuda:false,matangazo:false,sendNote:false,receiveNote:true},
    access:{enabled:true,days:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59'},
    windows:['schedules'],departments:[]},
 ];
@@ -2463,6 +2626,7 @@ try {
 }
 if(!ld(K.admins,null)) sv(K.admins,DA);
 if(!ld(K.testimony,null)) sv(K.testimony,[]);
+if(!ld(K.matangazo,null)) sv(K.matangazo,DM);
 // Migration: ensure all super admins have every built-in window in their windows array
 (function _migrateSuperAdminWindows(){
   try{
@@ -2828,7 +2992,7 @@ function goMain(){
     switchWindow(onlyWin);
   }
 
-  renderW();renderK();renderNames();
+  renderW();renderK();renderNames();renderMatangazo();
   loadHeaders();
   renderNavBar();
   show('main');
@@ -2847,6 +3011,7 @@ function renderW(){
   const can=CU&&(CU.role==='super'||CU.permissions.walawi);
   const cfg=getSettings();
   const subClrW = cfg.subLineColorW || DEF_SETTINGS.subLineColorW;
+  const nameClrW = cfg.nameColorW || DEF_SETTINGS.nameColorW;
   const th=document.querySelector('#panel-walawi .card-hdr h2');
   if(th){ th.style.fontSize=cfg.titleWFontSize+'px'; th.textContent=cfg.titleWText||DEF_SETTINGS.titleWText; }
   document.getElementById('w-tbody').innerHTML=data.map((r,i)=>{
@@ -2859,7 +3024,7 @@ function renderW(){
         ${r.time?`<span class="pill" style="font-size:${Math.max(fs-3,11)}px;">${esc(r.time)}</span>`:''}
       </td>
       <td style="vertical-align:middle;width:100%;">
-        <strong style="font-size:${fs}px;line-height:1.4;">${esc(r.name)}</strong>
+        <strong style="font-size:${fs}px;line-height:1.4;color:${nameClrW};">${esc(r.name)}</strong>
         ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map((s,si)=>{const c=(r.subColors&&r.subColors[si])||subClrW;return `<br><span style="font-size:${Math.max(fs-2,12)}px;color:${c};font-weight:600;">${esc(s)}</span>`;}).join('')}
         ${r.role?`<br><span style="font-size:${Math.max(fs-3,11)}px;color:var(--text-light);">${esc(r.role)}</span>`:''}
       </td>
@@ -2880,20 +3045,17 @@ function renderK(){
   const can=CU&&(CU.role==='super'||CU.permissions.kawaida);
   const cfg=getSettings();
   const subClrK = cfg.subLineColorK || DEF_SETTINGS.subLineColorK;
+  const nameClrK = cfg.nameColorK || DEF_SETTINGS.nameColorK;
   const th=document.querySelector('#panel-kawaida .card-hdr h2');
   if(th){ th.style.fontSize=cfg.titleKFontSize+'px'; th.textContent=cfg.titleKText||DEF_SETTINGS.titleKText; }
   document.getElementById('k-tbody').innerHTML=data.map((r,i)=>{
     const fs=r.fontSize||16; const num=i+1;
     const isUshuhuda = /ushuhuda/i.test(r.act||'');
-    const cellStyle = isUshuhuda
-      ? 'vertical-align:middle;width:100%;cursor:pointer;'
-      : 'vertical-align:middle;width:100%;';
-    const clickAttr = isUshuhuda
-      ? `onclick="switchTab('ushuhuda')" title="Fungua Majina ya Ushuhuda"`
-      : '';
-    const actHtml = isUshuhuda
-      ? `<strong style="font-size:${fs}px;line-height:1.4;color:var(--blue-bright);text-decoration:underline dotted 2px;">${esc(r.act)}&nbsp;🎤</strong>`
-      : `<strong style="font-size:${fs}px;line-height:1.4;">${esc(r.act)}</strong>`;
+    const isMatangazo = /matangazo/i.test(r.act||'');
+    const actHtml = `<strong style="font-size:${fs}px;line-height:1.4;color:${nameClrK};">${esc(r.act)}</strong>`;
+    let linkSub = '';
+    if(isUshuhuda) linkSub = `<br><span onclick="switchTab('ushuhuda')" title="Fungua Majina ya Ushuhuda" style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-bright);font-weight:600;cursor:pointer;">FUNGUA MAJINA YA USHUHUDA</span>`;
+    else if(isMatangazo) linkSub = `<br><span onclick="switchTab('matangazo')" title="Fungua Matangazo" style="font-size:${Math.max(fs-2,12)}px;color:var(--blue-bright);font-weight:600;cursor:pointer;">FUNGUA MATANGAZO</span>`;
     return `<tr>
       <td style="vertical-align:middle;text-align:center;width:32px;padding-right:6px;">
         <span style="display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:24px;background:var(--blue-mid);color:white;border-radius:50%;font-size:11px;font-weight:800;">${num}</span>
@@ -2901,8 +3063,9 @@ function renderK(){
       <td style="vertical-align:middle;white-space:nowrap;padding-right:10px;min-width:80px;">
         ${r.time?`<span class="pill" style="font-size:${Math.max(fs-3,11)}px;">${esc(r.time)}</span>`:''}
       </td>
-      <td style="${cellStyle}" ${clickAttr}>
+      <td style="vertical-align:middle;width:100%;">
         ${actHtml}
+        ${linkSub}
         ${(Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[])).filter(Boolean).map((s,si)=>{const c=(r.subColors&&r.subColors[si])||subClrK;return `<br><span style="font-size:${Math.max(fs-2,12)}px;color:${c};font-weight:600;">${esc(s)}</span>`;}).join('')}
         ${r.lead?`<br><span style="font-size:${Math.max(fs-3,11)}px;color:var(--text-light);">${esc(r.lead)}</span>`:''}
       </td>
@@ -2918,6 +3081,164 @@ function addKRow(){
   renderK();showToast('&#9989; Row added!','success');
 }
 function delKRow(i){const d=ld(K.kawaida,[]);d.splice(i,1);sv(K.kawaida,d);renderK();}
+function getMatangazo(){return ld(K.matangazo,DM);}
+function saveMatangazo(items){
+  sv(K.matangazo,items);
+  try{localStorage.setItem(K.matangazo+'_p',Date.now());_memStore[K.matangazo+'_p']=Date.now();}catch(e){_memStore[K.matangazo+'_p']=Date.now();}
+  if(_fbDb){ _fbDb.ref(FB_MATANGAZO_PATH).set(items).catch(function(e){ console.warn('[MOM] Firebase matangazo write error:',e); }); }
+}
+// ── Matangazo PIN logic ──
+var _matangazoPinUnlocked = false;
+function _getMSubs(item){
+  if(typeof item==='string') return [];
+  if(Array.isArray(item.subs)) return item.subs;
+  if(item.sub) return [item.sub];
+  return [];
+}
+function checkMatangazoPin(){
+  const cfg=getSettings();
+  const pin=cfg.matangazoPin||'';
+  if(!pin||_matangazoPinUnlocked||(CU&&CU.role==='super')) return true;
+  return false;
+}
+function showMatangazoPinGate(){
+  const gate=document.getElementById('m-pin-gate');
+  const content=document.getElementById('m-content');
+  if(!gate||!content) return;
+  if(checkMatangazoPin()){
+    gate.style.display='none'; content.style.display='block';
+  } else {
+    gate.style.display='flex'; content.style.display='none';
+  }
+}
+function submitMatangazoPin(){
+  const inp=document.getElementById('m-pin-inp');
+  const v=inp?inp.value.trim():'';
+  const cfg=getSettings();
+  const pin=cfg.matangazoPin||'';
+  if(v===pin){
+    _matangazoPinUnlocked=true;
+    showMatangazoPinGate();
+    renderMatangazo();
+    showToast('🔓 PIN accepted','success');
+  } else {
+    showToast('❌ PIN si sahihi / Wrong PIN','error');
+    if(inp) inp.value='';
+  }
+}
+function renderMatangazo(){
+  const items=getMatangazo();
+  const canDel=CU&&(CU.role==='super'||CU.permissions.matangazo);
+  const cfg=getSettings();
+  const mfs=cfg.matangazoFontSize||16;
+  const subClrM=cfg.subLineColorM||DEF_SETTINGS.subLineColorM;
+  const nameClrM=cfg.nameColorM||DEF_SETTINGS.nameColorM;
+  const th=document.querySelector('#panel-matangazo .card-hdr h2');
+  if(th){ th.style.fontSize=cfg.titleMFontSize+'px'; th.textContent=cfg.titleMText||DEF_SETTINGS.titleMText; }
+  showMatangazoPinGate();
+  const ml=document.getElementById('m-list'),me=document.getElementById('m-empty');
+  if(ml){
+    if(!items.length){ml.innerHTML='';if(me)me.style.display='block';}
+    else{
+      if(me)me.style.display='none';
+      ml.innerHTML=items.map((item,i)=>{
+        const t=typeof item==='string'?item:(item.text||'');
+        const subs=_getMSubs(item);
+        const fs=typeof item==='object'?(item.fontSize||mfs):mfs;
+        return `<li class="name-item">
+          <div class="name-num" style="font-size:${Math.max(fs-4,12)}px;">${i+1}</div>
+          <div class="name-txt" style="font-size:${fs}px;font-weight:700;">
+            <span style="color:${nameClrM};">${esc(t)}</span>
+            ${subs.filter(Boolean).map(s=>`<br><span style="font-size:${Math.max(fs-2,12)}px;color:${subClrM};font-weight:600;">${esc(s)}</span>`).join('')}
+          </div>
+          ${canDel?`<button class="btn-del-n" onclick="delMatangazo(${i})">&#10005;</button>`:''}</li>`;
+      }).join('');
+    }
+  }
+  // Also render in admin panel if exists
+  const al=document.getElementById('am-list'),ae=document.getElementById('am-empty');
+  if(al){
+    if(!items.length){al.innerHTML='';if(ae)ae.style.display='block';}
+    else{
+      if(ae)ae.style.display='none';
+      al.innerHTML=items.map((item,i)=>{
+        const t=typeof item==='string'?item:(item.text||'');
+        const subs=_getMSubs(item);
+        const fs=typeof item==='object'?(item.fontSize||mfs):mfs;
+        const subsHtml=subs.filter(Boolean).map((s,si)=>`
+          <div style="display:flex;align-items:center;gap:6px;padding-left:32px;margin-top:3px;">
+            <span style="font-size:${Math.max(fs-2,12)}px;color:${subClrM};font-weight:600;flex:1;">${esc(s)}</span>
+            <button class="btn-sm" style="padding:3px 7px;font-size:0.68rem;" onclick="editMatangazoSub(${i},${si})" title="Edit sub-line">&#9999;&#65039;</button>
+            <button class="btn-del-n" style="position:static;font-size:0.68rem;width:20px;height:20px;" onclick="delMatangazoSub(${i},${si})" title="Remove sub-line">&#10005;</button>
+          </div>`).join('');
+        return `<li class="name-item" style="flex-direction:column;align-items:flex-start;gap:4px;padding:10px 12px;">
+          <div style="display:flex;align-items:center;gap:8px;width:100%;">
+            <div class="name-num" style="font-size:${Math.max(fs-4,12)}px;">${i+1}</div>
+            <div class="name-txt" style="font-size:${fs}px;font-weight:700;flex:1;">${esc(t)}</div>
+            <button class="btn-sm" style="padding:4px 8px;font-size:0.72rem;" onclick="editMatangazoTitle(${i})" title="Edit title">&#9999;&#65039;</button>
+            <button class="btn-del-n" onclick="delMatangazo(${i})">&#10005;</button>
+          </div>
+          ${subsHtml}
+          <div style="display:flex;gap:6px;width:100%;padding-left:32px;margin-top:4px;">
+            <input type="text" class="row-edit-input" placeholder="+ Add sub-line..." maxlength="120" id="am-addsub-${i}" onkeydown="if(event.key==='Enter')addMatangazoSub(${i})" style="font-size:0.78rem;padding:5px 8px;flex:1;"/>
+            <button class="btn-sm" style="padding:5px 10px;font-size:0.72rem;" onclick="addMatangazoSub(${i})">+ Sub</button>
+          </div>
+        </li>`;
+      }).join('');
+    }
+  }
+}
+function adminAddMatangazo(){
+  const inp=document.getElementById('am-inp');
+  const subInp=document.getElementById('am-sub');
+  const v=inp?inp.value.trim():'';
+  if(!v)return showToast('Andika tangazo','error');
+  const s=subInp?subInp.value.trim():'';
+  const subs=s?[s]:[];
+  const items=getMatangazo();items.push({text:v,subs:subs,fontSize:16});saveMatangazo(items);
+  if(inp)inp.value='';if(subInp)subInp.value='';
+  renderMatangazo();showToast('✅ Tangazo limeongezwa!','success');
+}
+function addMatangazoSub(idx){
+  const inp=document.getElementById('am-addsub-'+idx);
+  const v=inp?inp.value.trim():'';
+  if(!v)return showToast('Andika maelezo','error');
+  const items=getMatangazo();
+  if(!items[idx])return;
+  if(!Array.isArray(items[idx].subs)) items[idx].subs=items[idx].sub?[items[idx].sub]:[];
+  items[idx].subs.push(v);
+  delete items[idx].sub;
+  saveMatangazo(items);
+  renderMatangazo();showToast('✅ Sub-line imeongezwa!','success');
+}
+function delMatangazo(i){const items=getMatangazo();items.splice(i,1);saveMatangazo(items);renderMatangazo();}
+function editMatangazoTitle(i){
+  const items=getMatangazo(); if(!items[i])return;
+  const t=typeof items[i]==='string'?items[i]:(items[i].text||'');
+  const nv=prompt('Edit announcement title / Badilisha tangazo:',t);
+  if(nv===null)return;
+  if(typeof items[i]==='string') items[i]={text:nv.trim(),subs:[],fontSize:16};
+  else items[i].text=nv.trim();
+  saveMatangazo(items);renderMatangazo();showToast('✅ Title updated','success');
+}
+function editMatangazoSub(i,si){
+  const items=getMatangazo(); if(!items[i])return;
+  const subs=_getMSubs(items[i]); if(!subs[si]&&subs[si]!=='')return;
+  const nv=prompt('Edit sub-line / Badilisha maelezo:',subs[si]);
+  if(nv===null)return;
+  if(!Array.isArray(items[i].subs)) items[i].subs=items[i].sub?[items[i].sub]:[];
+  items[i].subs[si]=nv.trim();
+  delete items[i].sub;
+  saveMatangazo(items);renderMatangazo();showToast('✅ Sub-line updated','success');
+}
+function delMatangazoSub(i,si){
+  const items=getMatangazo(); if(!items[i])return;
+  if(!Array.isArray(items[i].subs)) items[i].subs=items[i].sub?[items[i].sub]:[];
+  items[i].subs.splice(si,1);
+  delete items[i].sub;
+  saveMatangazo(items);renderMatangazo();showToast('Sub-line removed','success');
+}
+function confirmClearMatangazo(){showModal('Clear All Announcements','Remove all announcements? Ondoa matangazo yote?',()=>{saveMatangazo([]);renderMatangazo();showToast('🗑️ Cleared','success');});}
 function getNms(){return ld(K.testimony,[]);}
 function saveNms(n){
   sv(K.testimony,n);
@@ -3051,9 +3372,9 @@ function delEvName(i){
   const data = getEvData(K.eventTestimony);
   data.splice(i,1); saveEvData(K.eventTestimony, data); renderEvNames();
 }
-const DSR_LIMITS = {titleWFontSize:{min:12,max:36},titleKFontSize:{min:12,max:36},titleUFontSize:{min:12,max:36},testimonyFontSize:{min:12,max:40}};
-const DSR_LABELS = {titleWFontSize:'Ratiba ya Walawi',titleKFontSize:'Ratiba ya Kawaida',titleUFontSize:'Majina ya Ushuhuda',testimonyFontSize:'Jina la Ushuhuda'};
-const DSR_MAP = {titleWFontSize:'titleW',titleKFontSize:'titleK',titleUFontSize:'titleU',testimonyFontSize:'testimony'};
+const DSR_LIMITS = {titleWFontSize:{min:12,max:36},titleKFontSize:{min:12,max:36},titleUFontSize:{min:12,max:36},testimonyFontSize:{min:12,max:40},titleMFontSize:{min:14,max:48},matangazoFontSize:{min:10,max:36}};
+const DSR_LABELS = {titleWFontSize:'Ratiba ya Walawi',titleKFontSize:'Ratiba ya Kawaida',titleUFontSize:'Majina ya Ushuhuda',testimonyFontSize:'Jina la Ushuhuda',titleMFontSize:'Matangazo',matangazoFontSize:'Tangazo'};
+const DSR_MAP = {titleWFontSize:'titleW',titleKFontSize:'titleK',titleUFontSize:'titleU',testimonyFontSize:'testimony',titleMFontSize:'titleM'};
 function renderDisplaySettings(){
   const cfg=getSettings();
   Object.keys(DSR_MAP).forEach(key=>{
@@ -3068,14 +3389,24 @@ function renderDisplaySettings(){
   const pickerK = document.getElementById('dsr-color-subK');
   if(pickerW) pickerW.value = cfg.subLineColorW || DEF_SETTINGS.subLineColorW;
   if(pickerK) pickerK.value = cfg.subLineColorK || DEF_SETTINGS.subLineColorK;
+  const pickerNW = document.getElementById('dsr-color-nameW');
+  const pickerNK = document.getElementById('dsr-color-nameK');
+  if(pickerNW) pickerNW.value = cfg.nameColorW || DEF_SETTINGS.nameColorW;
+  if(pickerNK) pickerNK.value = cfg.nameColorK || DEF_SETTINGS.nameColorK;
+  const pickerActHdrK = document.getElementById('dsr-color-actHdrK');
+  if(pickerActHdrK) pickerActHdrK.value = cfg.activityHeaderColorK || DEF_SETTINGS.activityHeaderColorK;
+  const pickerSubM = document.getElementById('dsr-color-subM');
+  const pickerNameM = document.getElementById('dsr-color-nameM');
+  if(pickerSubM) pickerSubM.value = cfg.subLineColorM || DEF_SETTINGS.subLineColorM;
+  if(pickerNameM) pickerNameM.value = cfg.nameColorM || DEF_SETTINGS.nameColorM;
 }
 function changeSetting(key,delta){
   const cfg=getSettings(); const lim=DSR_LIMITS[key]||{min:10,max:48};
   const cur=cfg[key]||DEF_SETTINGS[key];
   const next=Math.min(lim.max,Math.max(lim.min,cur+delta));
-  saveSetting(key,next); renderDisplaySettings(); renderW();renderK();renderNames();
+  saveSetting(key,next); renderDisplaySettings(); renderW();renderK();renderNames();renderMatangazo();
 }
-function resetDisplaySettings(){sv(K.settings,{});renderDisplaySettings();renderW();renderK();renderNames();showToast('&#8634; Reset to defaults','success');}
+function resetDisplaySettings(){sv(K.settings,{});renderDisplaySettings();renderW();renderK();renderNames();renderMatangazo();showToast('&#8634; Reset to defaults','success');}
 function openAdmin(){
   if(!CU)return;
   const sup=CU.role==='super';
@@ -3240,7 +3571,7 @@ function renderAK(){
         <div id="k-subs-${i}">${(()=>{const subs=Array.isArray(r.subs)?r.subs:(r.sub?[r.sub]:[]);const clrs=Array.isArray(r.subColors)?r.subColors:[];const globalClr=getSettings().subLineColorK||DEF_SETTINGS.subLineColorK;return subs.map((s,si)=>{const c=clrs[si]||globalClr;return `<div style="display:flex;gap:5px;margin-bottom:5px;align-items:center;"><input class="row-edit-input" style="flex:1;margin:0;" value="${esc(s)}" placeholder="Sub-line ${si+1}" onchange="saveKSubLine(${i},${si},this.value)"/><input type="color" value="${c}" title="Sub-line color" style="width:30px;height:30px;flex-shrink:0;border:1.5px solid #93c5fd;border-radius:5px;cursor:pointer;padding:2px;" oninput="saveKSubColor(${i},${si},this.value)" onchange="saveKSubColor(${i},${si},this.value)"/><button onclick="removeKSubLine(${i},${si})" style="width:30px;height:30px;flex-shrink:0;background:#fee2e2;color:#dc2626;border:1px solid #fca5a5;border-radius:5px;cursor:pointer;font-size:0.75rem;display:inline-flex;align-items:center;justify-content:center;">✕</button></div>`;}).join('');})()}</div>
         <button onclick="addKSubLine(${i})" style="margin-top:3px;padding:5px 12px;background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:6px;font-size:0.74rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;">＋ Add sub-line</button>
         <div class="row-field-label" style="margin:8px 0 4px;">Kiongozi / Leader</div>
-        <input class="row-edit-input" value="${esc(r.lead||'')}" placeholder="Leader (optional)" onchange="saveKField(${i},'lead',this.value)"/>
+        <input class="row-edit-input" value="${esc(r.lead||'')}" placeholder="WAKATI / TIME (optional)" onchange="saveKField(${i},'lead',this.value)"/>
         <div class="row-field-label" style="margin:8px 0 4px;">Wakati / Time</div>
         <input class="row-edit-input" value="${esc(r.time||'')}" placeholder="Time (optional)" onchange="saveKField(${i},'time',this.value)"/>
         <div class="row-font-row" style="margin-top:8px;">
@@ -3382,6 +3713,7 @@ function addAdmin(){
       walawi: r==='super'||document.getElementById('p-w').checked,
       kawaida: r==='super'||document.getElementById('p-k').checked,
       ushuhuda: r==='super'||document.getElementById('p-u').checked,
+      matangazo: r==='super'||document.getElementById('p-m').checked,
       sendNote: r==='super'||r==='view'||document.getElementById('p-notes').checked,
       receiveNote: r==='super'||document.getElementById('p-receive').checked
     },
@@ -3432,6 +3764,7 @@ function openEditUser(i){
         <div class="perm-row"><span style="font-size:0.82rem;font-weight:700;">Edit Ratiba ya Walawi</span><label class="toggle"><input type="checkbox" id="eu-w" ${u.permissions.walawi?'checked':''}/><span class="tog-slider"></span></label></div>
         <div class="perm-row"><span style="font-size:0.82rem;font-weight:700;">Edit Ratiba ya Kawaida</span><label class="toggle"><input type="checkbox" id="eu-k" ${u.permissions.kawaida?'checked':''}/><span class="tog-slider"></span></label></div>
         <div class="perm-row"><span style="font-size:0.82rem;font-weight:700;">Edit Majina ya Ushuhuda</span><label class="toggle"><input type="checkbox" id="eu-u" ${u.permissions.ushuhuda?'checked':''}/><span class="tog-slider"></span></label></div>
+        <div class="perm-row"><span style="font-size:0.82rem;font-weight:700;">Edit Matangazo</span><label class="toggle"><input type="checkbox" id="eu-m" ${u.permissions.matangazo?'checked':''}/><span class="tog-slider"></span></label></div>
         <div class="perm-row" style="margin-top:6px;padding-top:7px;border-top:1px solid var(--border);"><span style="font-size:0.82rem;font-weight:700;">📌 Send Notes</span><label class="toggle"><input type="checkbox" id="eu-notes" ${u.permissions.sendNote!==false?'checked':''}/><span class="tog-slider"></span></label></div>
         <div class="perm-row"><span style="font-size:0.82rem;font-weight:700;">📥 Receive Notes</span><label class="toggle"><input type="checkbox" id="eu-receive" ${u.permissions.receiveNote?'checked':''}/><span class="tog-slider"></span></label></div>
       </div>
@@ -3539,6 +3872,7 @@ function saveEditUser(){
     walawi:   r==='super'||(r==='regular'&&document.getElementById('eu-w')?.checked),
     kawaida:  r==='super'||(r==='regular'&&document.getElementById('eu-k')?.checked),
     ushuhuda: r==='super'||(r==='regular'&&document.getElementById('eu-u')?.checked),
+    matangazo: r==='super'||(r==='regular'&&document.getElementById('eu-m')?.checked),
     sendNote: r==='super'||(document.getElementById('eu-notes')?.checked||false),
     receiveNote: r==='super'||(document.getElementById('eu-receive')?.checked||false)
   };
@@ -3679,8 +4013,8 @@ function renderDraftK(){
               <input class="row-edit-input" value="${esc(r.act)}" placeholder="Shughuli" onchange="saveDKF(${i},'act',this.value)"/></div>
             <div><div class="row-field-label">Sub-name (line 2)</div>
               <input class="row-edit-input" value="${esc(r.sub||'')}" placeholder="Sub-name (optional)" onchange="saveDKF(${i},'sub',this.value)"/></div>
-            <div><div class="row-field-label">Kiongozi / Leader</div>
-              <input class="row-edit-input" value="${esc(r.lead||'')}" placeholder="Leader (optional)" onchange="saveDKF(${i},'lead',this.value)"/></div>
+            <div><div class="row-field-label">WAKATI / TIME</div>
+              <input class="row-edit-input" value="${esc(r.lead||'')}" placeholder="WAKATI / TIME (optional)" onchange="saveDKF(${i},'lead',this.value)"/></div>
             <div><div class="row-field-label">Wakati / Time</div>
               <input class="row-edit-input" value="${esc(r.time||'')}" placeholder="Time (optional)" onchange="saveDKF(${i},'time',this.value)"/></div>
             <div class="row-font-row">
@@ -3752,10 +4086,13 @@ function closePreview(){document.getElementById('preview-overlay').classList.rem
 function loadHeaders(){
   const h=ld(K.headers,DEF_HEADERS);
   const isSuper=CU&&CU.role==='super';
+  const cfg=getSettings();
+  const actHdrClr = cfg.activityHeaderColorK || DEF_SETTINGS.activityHeaderColorK;
   const ids=['wh1','wh2','wh3','kh1','kh2','kh3','awh1','awh2','awh3','akh1','akh2','akh3'];
   ids.forEach(id=>{
     const el=document.getElementById(id); if(!el)return;
     el.textContent=h[id]||DEF_HEADERS[id];
+    if(id==='kh2'||id==='akh2') el.style.color=actHdrClr;
     if(isSuper){
       el.classList.add('th-editable');el.setAttribute('contenteditable','true');
       el.setAttribute('title','Click to edit / Bonyeza kubadilisha');
@@ -4236,6 +4573,7 @@ const DEFAULT_MENUS = [
   { id:'walawi',   name:'RATIBA YA WALAWI', icon:'\uD83D\uDCCB', title:'Ratiba ya Walawi',   desc:'Ministers',  builtin:true,  visible:true  },
   { id:'kawaida',  name:'RATIBA YA KAWAIDA',icon:'\uD83D\uDDD3\uFE0F', title:'Ratiba ya Kawaida',  desc:'Program',    builtin:true,  visible:true  },
   { id:'ushuhuda', name:'MAJINA YA USHUHUDA',icon:'\uD83C\uDFA4', title:'Majina ya Ushuhuda',desc:'Live',       builtin:true,  visible:true  },
+  { id:'matangazo', name:'MATANGAZO', icon:'\uD83D\uDCE2', title:'Matangazo', desc:'Live', builtin:true, visible:true },
 ];
 
 function getMenus(){
@@ -4327,7 +4665,7 @@ function renderCustomPanels(){
             <div class="add-row">
               <input type="text" id="ev-k-t" placeholder="Time" style="max-width:110px;"/>
               <input type="text" id="ev-k-a" placeholder="Shughuli / Activity"/>
-              <input type="text" id="ev-k-l" placeholder="Kiongozi / Leader"/>
+              <input type="text" id="ev-k-l" placeholder="WAKATI / TIME"/>
               <button class="btn-sm" onclick="addEvKRow()">+ Add</button>
             </div>
           </div>
@@ -4363,6 +4701,7 @@ function switchTab(n){
   const btn   = document.getElementById('nt-'+n);
   if(panel) panel.classList.add('active');
   if(btn)   btn.classList.add('active');
+  if(n==='matangazo') renderMatangazo();
   if(n==='walawi')   renderW();
   if(n==='kawaida')  renderK();
   if(n==='ushuhuda') renderNames();
@@ -12754,6 +13093,17 @@ document.addEventListener('DOMContentLoaded', function(){
       console.warn('[MOM] Firebase names listener error:', err);
     });
 
+    // ── Matangazo (Announcements) ──────────────────
+    _fbDb.ref(FB_MATANGAZO_PATH).on('value', function(snap){
+      var items = snap.val();
+      if(!Array.isArray(items)) items = [];
+      try{ localStorage.setItem(K.matangazo, JSON.stringify(items)); }catch(e){}
+      _memStore[K.matangazo] = items;
+      if(CU && typeof renderMatangazo === 'function') renderMatangazo();
+    }, function(err){
+      console.warn('[MOM] Firebase matangazo listener error:', err);
+    });
+
     // ── 2. Sticky Notes (to Service Leader / Msimamizi) ──────────
     // When any member sends a note it is written to Firebase.
     // Msimamizi's browser receives the push and shows it instantly.
@@ -13026,6 +13376,66 @@ document.addEventListener('DOMContentLoaded', function(){
     );
 
     console.log('[MOM] Firebase real-time listeners attached ✔ (full two-way sync enabled)');
+
+    // ── AUTO-CLEAR: Every Sunday at 11:55 PM Central Time ────────
+    // Clears testimony names and sticky notes once per week.
+    // Checks every 30 seconds; fires only on Sunday (day 0) at 23:55 CT.
+    // A flag prevents duplicate clears within the same window.
+    var _autoClearDoneThisWeek = false;
+
+    function _isSundayNight(){
+      // Get current time in US Central timezone
+      var now = new Date();
+      var ct = new Date(now.toLocaleString('en-US', {timeZone: 'America/Chicago'}));
+      var day = ct.getDay();   // 0 = Sunday
+      var hr  = ct.getHours(); // 23
+      var min = ct.getMinutes(); // 55
+      return { day: day, hr: hr, min: min };
+    }
+
+    function _autoClearTestimonyNames(){
+      var names = [];
+      try{ names = JSON.parse(localStorage.getItem(K.testimony)||'[]'); }catch(e){}
+      if(!Array.isArray(names)) names = _memStore[K.testimony] || [];
+      if(names.length > 0){
+        console.log('[MOM] Auto-clear: Clearing ' + names.length + ' testimony names');
+        try{ localStorage.setItem(K.testimony, JSON.stringify([])); }catch(e){}
+        _memStore[K.testimony] = [];
+        if(_fbDb){ _fbDb.ref(FB_NAMES_PATH).set([]).catch(function(e){ console.warn('[MOM] Auto-clear names Firebase error:', e); }); }
+        if(CU && typeof renderNames === 'function') renderNames();
+      }
+    }
+
+    function _autoClearStickyNotes(){
+      var notes = [];
+      try{ notes = JSON.parse(localStorage.getItem(STICKY_KEY)||'[]'); }catch(e){}
+      if(!Array.isArray(notes)) notes = _memStore[STICKY_KEY] || [];
+      if(notes.length > 0){
+        console.log('[MOM] Auto-clear: Clearing ' + notes.length + ' sticky notes');
+        try{ localStorage.setItem(STICKY_KEY, JSON.stringify([])); }catch(e){}
+        _memStore[STICKY_KEY] = [];
+        if(_fbDb){ _fbDb.ref(FB_NOTES_PATH).set([]).catch(function(e){ console.warn('[MOM] Auto-clear notes Firebase error:', e); }); }
+        if(CU && typeof renderIncomingNotes === 'function') renderIncomingNotes();
+      }
+    }
+
+    setInterval(function(){
+      var t = _isSundayNight();
+      // Sunday = 0, 23:55 CT (fires during the 23:55 minute)
+      if(t.day === 0 && t.hr === 23 && t.min === 55){
+        if(!_autoClearDoneThisWeek){
+          _autoClearDoneThisWeek = true;
+          console.log('[MOM] Auto-clear triggered: Sunday 11:55 PM CT');
+          _autoClearTestimonyNames();
+          _autoClearStickyNotes();
+        }
+      } else {
+        // Reset flag once we're past the clear window
+        _autoClearDoneThisWeek = false;
+      }
+    }, 30000); // check every 30 seconds
+
+    console.log('[MOM] Auto-clear scheduled ✔ (every Sunday at 11:55 PM Central Time)');
   }
 
   // Attach immediately if page is already loaded, else wait for DOMContentLoaded
