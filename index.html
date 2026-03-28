@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -2001,7 +2003,10 @@ html, body {
 
             <!-- Report log -->
             <div>
-              <div class="sec-label" style="margin-bottom:8px;">📜 Submitted Reports</div>
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <div class="sec-label" style="margin:0;">📜 Submitted Reports</div>
+                <div id="rp-trash-btn-row"></div>
+              </div>
               <div id="rp-log-list" style="max-height:40vh;overflow-y:auto;"></div>
             </div>
           </div>
@@ -2200,6 +2205,7 @@ const K={admins:'mom_a6',testimony:'mom_t4',walawi:'mom_w4',kawaida:'mom_k4',ses
   specialEvent:'mom_sev1',depts:'mom_depts1',
   activityLog:'mom_activity_log',failedAttempts:'mom_failed_attempts',securityAlerts:'mom_security_alerts',
   headcount:'mom_headcount_v1',reportLog:'mom_report_log_v1',reportConfig:'mom_report_cfg_v1',
+  reportTrash:'mom_report_trash_v1',
   subDepts:'mom_subdepts_v1'};
 const K_TYPO         = 'mom_typography_v1';
 
@@ -6687,11 +6693,19 @@ function renderHeadcount(){
   if(!body) return;
   const hcData = getHeadcountData();
 
+  const today = new Date().toISOString().slice(0,10);
   const colsHtml = HC_DAYS.map((day,idx)=>{
     const saved = hcData[day.id] || {};
-    const dt = saved.date||'';
     const ts = saved.timestamp||'', by = saved.enteredBy||'';
-    const grand = saved.total||0;
+    // Always default date to today; only pre-fill counts when saved data is from today
+    const isToday = saved.date === today;
+    const adults      = isToday ? (saved.adults||'')      : '';
+    const adultMale   = isToday ? (saved.adultMale||'')   : '';
+    const adultFemale = isToday ? (saved.adultFemale||'') : '';
+    const children    = isToday ? (saved.children||'')    : '';
+    const childMale   = isToday ? (saved.childMale||'')   : '';
+    const childFemale = isToday ? (saved.childFemale||'') : '';
+    const grand       = isToday ? (saved.total||0)        : 0;
     return `<div class="hce-col" id="hce-col-${day.id}">
       <div class="hce-col-header">
         <span class="hce-col-icon">${day.icon}</span>
@@ -6702,20 +6716,20 @@ function renderHeadcount(){
 
         <div class="hce-primary-label">Adults</div>
         <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
-          id="hce-adultTotal-${day.id}" value="${saved.adults||''}" placeholder="0"
+          id="hce-adultTotal-${day.id}" value="${adults}" placeholder="0"
           class="hce-input hce-input-primary" oninput="recalcHcTotal('${day.id}')"/>
         <div class="hce-optional-label">Optional: M / F</div>
         <div class="hce-gender-inline">
           <div class="hce-gender-cell">
             <span class="hce-gender-tag male">M</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
-              id="hce-adultMale-${day.id}" value="${saved.adultMale||''}" placeholder="0"
+              id="hce-adultMale-${day.id}" value="${adultMale}" placeholder="0"
               class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','adult')"/>
           </div>
           <div class="hce-gender-cell">
             <span class="hce-gender-tag female">F</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
-              id="hce-adultFemale-${day.id}" value="${saved.adultFemale||''}" placeholder="0"
+              id="hce-adultFemale-${day.id}" value="${adultFemale}" placeholder="0"
               class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','adult')"/>
           </div>
         </div>
@@ -6724,20 +6738,20 @@ function renderHeadcount(){
 
         <div class="hce-primary-label">Children</div>
         <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
-          id="hce-childTotal-${day.id}" value="${saved.children||''}" placeholder="0"
+          id="hce-childTotal-${day.id}" value="${children}" placeholder="0"
           class="hce-input hce-input-primary" oninput="recalcHcTotal('${day.id}')"/>
         <div class="hce-optional-label">Optional: M / F</div>
         <div class="hce-gender-inline">
           <div class="hce-gender-cell">
             <span class="hce-gender-tag male">M</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
-              id="hce-childMale-${day.id}" value="${saved.childMale||''}" placeholder="0"
+              id="hce-childMale-${day.id}" value="${childMale}" placeholder="0"
               class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','child')"/>
           </div>
           <div class="hce-gender-cell">
             <span class="hce-gender-tag female">F</span>
             <input type="number" min="0" inputmode="numeric" pattern="[0-9]*"
-              id="hce-childFemale-${day.id}" value="${saved.childFemale||''}" placeholder="0"
+              id="hce-childFemale-${day.id}" value="${childFemale}" placeholder="0"
               class="hce-input hce-input-sm" oninput="recalcFromGender('${day.id}','child')"/>
           </div>
         </div>
@@ -6747,10 +6761,18 @@ function renderHeadcount(){
           <span class="hce-total-val" id="hc-total-num-${day.id}">${grand}</span>
         </div>
         <div class="hce-date-wrap">
-          <input type="date" id="hc-date-${day.id}" value="${dt}" class="hce-date-input"
+          <input type="date" id="hc-date-${day.id}" value="${today}" class="hce-date-input"
             onchange="onHcDateChange('${day.id}', this.value)"/>
         </div>
-        <div class="hce-meta">${ts?`👤 ${esc(by)} · ${esc(dt)}`:'No data saved yet'}</div>
+        <div class="hce-meta">${ts?`👤 ${esc(by)} · ${esc(saved.date||today)}`:'No data saved yet'}</div>
+        <button onclick="cancelHcDay('${day.id}')" style="
+          width:100%;margin-top:8px;padding:9px 6px;
+          background:white;color:#64748b;
+          border:1.5px solid #e2e8f0;border-radius:10px;
+          font-family:'Nunito',sans-serif;font-size:0.75rem;font-weight:800;
+          cursor:pointer;letter-spacing:0.02em;">
+          ✕ Cancel ${day.label}
+        </button>
       </div>
     </div>`;
   }).join('');
@@ -6772,7 +6794,7 @@ function renderHeadcount(){
     <div class="hce-bottom-bar">
       <div class="hce-bottom-hint">Set date per day above · All fields are optional</div>
       <div class="hce-btn-row">
-        <button class="hce-clear-btn" onclick="openHcResetModal()">🗑️ Clear Month</button>
+        <button class="hce-clear-btn" onclick="openHcResetModal()">🗑️ Delete Records…</button>
         <button class="hce-submit-btn" onclick="saveAllHcDays()">Submit</button>
       </div>
     </div>
@@ -7074,6 +7096,22 @@ function saveHcDay(dayId, dayLabel){
   showToast('✅ '+dayLabel+' saved — Total: '+total,'success');
   renderHeadcount();
   setTimeout(()=>renderHcHistory(),100);
+}
+
+// ── Cancel / clear input fields for a single day column ──────────
+// Does NOT touch any saved/stored data — only resets the form fields.
+function cancelHcDay(dayId){
+  var today = new Date().toISOString().slice(0,10);
+  var fields = ['adultTotal','adultMale','adultFemale','childTotal','childMale','childFemale'];
+  fields.forEach(function(f){
+    var el = document.getElementById('hce-'+f+'-'+dayId);
+    if(el){ el.value = ''; }
+  });
+  var dateEl = document.getElementById('hc-date-'+dayId);
+  if(dateEl) dateEl.value = today;
+  var totalEl = document.getElementById('hc-total-num-'+dayId);
+  if(totalEl) totalEl.textContent = '0';
+  showToast('✕ ' + dayId.charAt(0).toUpperCase()+dayId.slice(1) + ' entry cleared', 'success');
 }
 
 function openHcResetModal(){
@@ -7694,6 +7732,172 @@ function saveReportConfig(cfg){ sv(K.reportConfig,cfg); }
 function getReportLog(){ return ld(K.reportLog,[]); }
 function saveReportLog(log){ sv(K.reportLog,log); }
 
+// ── Report Trash helpers (30-day TTL, admin-only) ─────────────────
+var _REPORT_TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+function getReportTrash(){
+  try{ return JSON.parse(localStorage.getItem(K.reportTrash)||'[]'); }catch(e){ return []; }
+}
+function saveReportTrash(arr){
+  try{ localStorage.setItem(K.reportTrash, JSON.stringify(arr)); }catch(e){}
+}
+function _purgeExpiredReportTrash(){
+  var now   = Date.now();
+  var fresh = getReportTrash().filter(function(item){
+    return (now - (item.deletedAt||0)) < _REPORT_TRASH_TTL_MS;
+  });
+  saveReportTrash(fresh);
+  return fresh;
+}
+function reportTrashCount(){
+  return _purgeExpiredReportTrash().length;
+}
+
+// ── Soft-delete a report (moves to trash) ────────────────────────
+function deleteReport(reportId){
+  if(!CU || CU.role !== 'super'){ showToast('🔒 Admin only','error'); return; }
+  var log   = getReportLog();
+  var entry = log.find(function(r){ return r.id === reportId; });
+  if(!entry){ showToast('Report not found.','error'); return; }
+  var trash = getReportTrash();
+  trash.unshift(Object.assign({}, entry, { deletedAt: Date.now() }));
+  saveReportTrash(trash);
+  saveReportLog(log.filter(function(r){ return r.id !== reportId; }));
+  showToast('🗑️ Report moved to Trash — recoverable for 30 days','success');
+  renderReportsPanel();
+}
+
+// ── Recover a report from trash ───────────────────────────────────
+function recoverReport(reportId){
+  if(!CU || CU.role !== 'super'){ showToast('🔒 Admin only','error'); return; }
+  var trash    = getReportTrash();
+  var item     = trash.find(function(r){ return r.id === reportId; });
+  if(!item){ showToast('Item not found in trash.','error'); return; }
+  var restored = Object.assign({}, item);
+  delete restored.deletedAt;
+  var log = getReportLog();
+  log.unshift(restored);
+  saveReportLog(log);
+  saveReportTrash(trash.filter(function(r){ return r.id !== reportId; }));
+  showToast('✅ Report restored to Submitted Reports','success');
+  renderReportTrash();
+}
+
+// ── Permanently delete one report from trash ──────────────────────
+function deleteReportForever(reportId){
+  if(!CU || CU.role !== 'super'){ showToast('🔒 Admin only','error'); return; }
+  if(!confirm('Permanently delete this report? This cannot be undone.')){ return; }
+  saveReportTrash(getReportTrash().filter(function(r){ return r.id !== reportId; }));
+  showToast('🗑️ Report permanently deleted','success');
+  renderReportTrash();
+}
+
+// ── Empty the entire report trash ─────────────────────────────────
+function emptyReportTrash(){
+  if(!CU || CU.role !== 'super'){ showToast('🔒 Admin only','error'); return; }
+  var cnt = getReportTrash().length;
+  if(!cnt){ showToast('Trash is already empty.','success'); return; }
+  if(!confirm('Permanently delete all '+cnt+' report(s)? This cannot be undone.')){ return; }
+  saveReportTrash([]);
+  showToast('🗑️ Report trash emptied','success');
+  renderReportTrash();
+}
+
+// ── Render the report trash view (admin-only) ─────────────────────
+function renderReportTrash(){
+  if(!CU || CU.role !== 'super'){ showToast('🔒 Admin only','error'); return; }
+  const items = _purgeExpiredReportTrash();
+  const now   = Date.now();
+  const logDiv = document.getElementById('rp-log-list');
+  if(!logDiv) return;
+
+  const backBtn = `<button onclick="renderReportsPanel()" style="
+    display:inline-flex;align-items:center;gap:6px;margin-bottom:10px;
+    padding:6px 14px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:20px;
+    font-size:0.75rem;font-weight:800;color:#475569;cursor:pointer;font-family:'Nunito',sans-serif;">
+    ← Back to Reports
+  </button>`;
+
+  const header = `
+    <div style="background:linear-gradient(135deg,#7f1d1d,#dc2626);border-radius:12px;
+      padding:11px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:0.8rem;font-weight:800;color:white;letter-spacing:0.06em;">
+          🗑️ REPORT TRASH
+        </div>
+        <div style="font-size:0.64rem;color:#fca5a5;margin-top:2px;">Permanently deleted after 30 days · Admin only</div>
+      </div>
+      <div style="display:flex;align-items:center;gap:7px;">
+        <span style="background:rgba(255,255,255,0.2);color:white;border-radius:20px;
+          padding:3px 9px;font-size:0.7rem;font-weight:800;">
+          ${items.length} item${items.length===1?'':'s'}
+        </span>
+        ${items.length > 0 ? `<button onclick="emptyReportTrash()" style="
+          padding:4px 10px;background:white;color:#dc2626;border:none;border-radius:20px;
+          font-size:0.7rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+          Empty
+        </button>` : ''}
+      </div>
+    </div>`;
+
+  let cards;
+  if(!items.length){
+    cards = `<div style="text-align:center;padding:36px 16px;background:white;
+      border:1.5px solid #fca5a5;border-radius:12px;">
+      <div style="font-size:2.2rem;margin-bottom:7px;">🗑️</div>
+      <div style="font-size:0.84rem;font-weight:700;color:#374151;">Trash is empty</div>
+      <div style="font-size:0.72rem;color:#9ca3af;margin-top:4px;">
+        Deleted reports stay here for 30 days before permanent removal.
+      </div>
+    </div>`;
+  } else {
+    cards = items.map(function(r){
+      const msLeft   = _REPORT_TRASH_TTL_MS - (now - (r.deletedAt||0));
+      const daysLeft = Math.max(0, Math.ceil(msLeft / (24*60*60*1000)));
+      const deletedOn = r.deletedAt
+        ? new Date(r.deletedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+        : '—';
+      return `<div style="background:white;border:1.5px solid #fca5a5;
+        border-left:4px solid #dc2626;border-radius:10px;padding:11px 13px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px;">
+          <strong style="font-size:0.82rem;color:#991b1b;">📊 ${esc(r.label)}</strong>
+          <span style="font-size:0.66rem;background:#fef2f2;color:#dc2626;
+            padding:2px 8px;border-radius:20px;font-weight:800;">⏳ ${daysLeft} day${daysLeft===1?'':'s'} left</span>
+        </div>
+        <div style="font-size:0.7rem;color:var(--text-light);display:flex;flex-wrap:wrap;gap:7px;margin-bottom:6px;">
+          <span>👤 ${esc(r.submittedBy)}</span>
+          <span>🕐 ${esc(r.submittedAt)}</span>
+          <span>Deleted: ${deletedOn}</span>
+        </div>
+        <div style="display:flex;gap:6px;margin-top:6px;">
+          <span style="font-size:0.68rem;background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:20px;font-weight:800;">
+            👥 ${r.summary&&r.summary.total||0} total
+          </span>
+          <span style="font-size:0.68rem;background:#d1fae5;color:#065f46;padding:2px 7px;border-radius:20px;font-weight:800;">
+            📅 ${r.summary&&r.summary.sessions||0} sessions
+          </span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:9px;">
+          <button onclick="recoverReport('${esc(r.id)}')" style="
+            flex:1;padding:9px 6px;background:#f0fdf4;color:#065f46;
+            border:1.5px solid #86efac;border-radius:8px;
+            font-size:0.78rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;
+            display:flex;align-items:center;justify-content:center;gap:5px;">
+            ♻️ Restore
+          </button>
+          <button onclick="deleteReportForever('${esc(r.id)}')" style="
+            flex:0 0 48px;padding:9px 6px;background:#fff5f5;color:#dc2626;
+            border:1.5px solid #fca5a5;border-radius:8px;
+            font-size:0.82rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;
+            display:flex;align-items:center;justify-content:center;" title="Delete Forever">✕
+          </button>
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  logDiv.innerHTML = backBtn + header + cards;
+}
+
 const MONTH_NAMES_RPT = ['','January','February','March','April','May','June','July','August','September','October','November','December'];
 
 // ── Check if end-of-month reminder should show ──
@@ -7896,15 +8100,43 @@ function renderReportsPanel(){
   // Report log — visible to super admin and granted viewers
   const log    = getReportLog();
   const logDiv = document.getElementById('rp-log-list');
+
+  // Trash button — rendered in its own row (admin only), always visible
+  const trashRow = document.getElementById('rp-trash-btn-row');
+  if(trashRow){
+    if(isSup){
+      const trashCnt = reportTrashCount();
+      trashRow.innerHTML = `<button onclick="renderReportTrash()" style="
+        display:inline-flex;align-items:center;gap:5px;
+        padding:5px 12px;background:#fff5f5;color:#dc2626;
+        border:1.5px solid #fca5a5;border-radius:20px;
+        font-size:0.72rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+        🗑️ Trash${trashCnt > 0
+          ? `&nbsp;<span style="background:#dc2626;color:white;border-radius:50%;padding:1px 5px;font-size:0.62rem;">${trashCnt}</span>`
+          : ''}
+      </button>`;
+    } else {
+      trashRow.innerHTML = '';
+    }
+  }
+
   if(logDiv){
     if(!log.length){
-      logDiv.innerHTML='<div style="text-align:center;color:var(--text-light);padding:16px;font-size:0.82rem;">No reports submitted yet.</div>';
+      logDiv.innerHTML = '<div style="text-align:center;color:var(--text-light);padding:16px;font-size:0.82rem;">No reports submitted yet.</div>';
     } else {
       logDiv.innerHTML = log.map(r=>`
         <div style="background:white;border:1.5px solid var(--border);border-left:4px solid var(--blue-bright);border-radius:10px;padding:11px 13px;margin-bottom:8px;">
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:5px;">
             <strong style="font-size:0.82rem;color:var(--blue-deep);">📊 ${esc(r.label)}</strong>
-            <span style="font-size:0.68rem;background:${r.status==='sent'?'#d1fae5':'#dbeafe'};color:${r.status==='sent'?'#065f46':'#1e40af'};padding:2px 8px;border-radius:20px;font-weight:800;">${r.status==='sent'?'✅ Sent':'📋 Logged'}${r.auto?' 🤖 Auto':''}</span>
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-size:0.68rem;background:${r.status==='sent'?'#d1fae5':'#dbeafe'};color:${r.status==='sent'?'#065f46':'#1e40af'};padding:2px 8px;border-radius:20px;font-weight:800;">${r.status==='sent'?'✅ Sent':'📋 Logged'}${r.auto?' 🤖 Auto':''}</span>
+              ${isSup ? `<button onclick="deleteReport('${esc(r.id)}')" title="Move to Trash" style="
+                padding:3px 8px;background:#fff5f5;color:#dc2626;
+                border:1.5px solid #fca5a5;border-radius:8px;
+                font-size:0.72rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+                🗑️
+              </button>` : ''}
+            </div>
           </div>
           <div style="font-size:0.72rem;color:var(--text-light);display:flex;flex-wrap:wrap;gap:8px;">
             <span>👤 ${esc(r.submittedBy)}</span>
