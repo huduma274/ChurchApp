@@ -1,3 +1,5 @@
+
+
 <!DOCTYPE html>
 <html lang="sw">
 <head>
@@ -2272,9 +2274,10 @@ const K_WASIM_SUN    = 'mom_wasim_sun_v1';
 const K_WASIM_SAT    = 'mom_wasim_sat_v1';
 const K_WASIM_ACCESS = 'mom_wasim_access_v2';
 const K_WIN_OVERRIDES= 'mom_win_overrides_v1';
-const K_FIN_EXPENSES   = 'mom_fin_expenses_v1';
-const K_FIN_OFFERINGS  = 'mom_fin_offerings_v1';
-const K_FIN_EDIT_REQS  = 'mom_fin_edit_reqs_v1';
+const K_FIN_EXPENSES        = 'mom_fin_expenses_v1';
+const K_FIN_OFFERINGS       = 'mom_fin_offerings_v1';
+const K_FIN_OFFERING_TRASH  = 'mom_fin_offering_trash_v1';   // soft-delete bin (14-day TTL)
+const K_FIN_EDIT_REQS       = 'mom_fin_edit_reqs_v1';
 const K_CH_HQ          = 'mom_ch_hq_v1';
 const K_CH_ONLINE      = 'mom_ch_online_v1';
 const K_CH_MASTER      = 'mom_ch_master_v1';
@@ -4991,6 +4994,27 @@ function getFinanceOfferings(){ return ld(K_FIN_OFFERINGS, []); }
 function saveFinanceExpenses(arr){ sv(K_FIN_EXPENSES, arr); }
 function saveFinanceOfferings(arr){ sv(K_FIN_OFFERINGS, arr); }
 
+// ── Offering Trash helpers (14-day TTL) ───────────────────────────
+var _OFFERING_TRASH_TTL_MS = 14 * 24 * 60 * 60 * 1000; // 14 days in ms
+function getOfferingTrash(){
+  try{ return JSON.parse(localStorage.getItem(K_FIN_OFFERING_TRASH)||'[]'); }catch(e){ return []; }
+}
+function saveOfferingTrash(arr){
+  try{ localStorage.setItem(K_FIN_OFFERING_TRASH, JSON.stringify(arr)); }catch(e){}
+}
+// Remove items older than 14 days — call before displaying trash
+function _purgeExpiredOfferingTrash(){
+  var now = Date.now();
+  var fresh = getOfferingTrash().filter(function(item){
+    return (now - (item.deletedAt||0)) < _OFFERING_TRASH_TTL_MS;
+  });
+  saveOfferingTrash(fresh);
+  return fresh;
+}
+function offeringTrashCount(){
+  return _purgeExpiredOfferingTrash().length;
+}
+
 function getFinEditReqs(){ return ld(K_FIN_EDIT_REQS, []); }
 function saveFinEditReqs(arr){ sv(K_FIN_EDIT_REQS, arr); }
 
@@ -5359,10 +5383,20 @@ function renderFinanceRecordsDetail(folder){
     </div>`;
   } else {
     // ── CARD VIEW for Offerings ──
+    const trashCnt = offeringTrashCount();
     listHtml = `
-    <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;">
+    <div style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;">
       <span style="font-size:0.72rem;color:var(--text-light);">${sorted.length} entr${sorted.length===1?'y':'ies'}</span>
-      <span style="font-size:0.8rem;font-weight:800;color:${darkColor};">Total: $${totalAmt.toLocaleString()}</span>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:0.8rem;font-weight:800;color:${darkColor};">Total: $${totalAmt.toLocaleString()}</span>
+        <button onclick="renderOfferingTrash()" style="
+          display:flex;align-items:center;gap:5px;
+          padding:5px 11px;background:#fff5f5;color:#dc2626;border:1.5px solid #fca5a5;
+          border-radius:20px;font-size:0.72rem;font-weight:800;cursor:pointer;
+          font-family:'Nunito',sans-serif;white-space:nowrap;">
+          🗑️ Trash${trashCnt > 0 ? ` <span style="background:#dc2626;color:white;border-radius:50%;padding:1px 5px;font-size:0.65rem;">${trashCnt}</span>` : ''}
+        </button>
+      </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:8px;">
       ${sorted.map(e => {
@@ -5392,7 +5426,11 @@ function renderFinanceRecordsDetail(folder){
               background:#eff6ff;color:#1d4ed8;border:1.5px solid #93c5fd;border-radius:6px;
               font-size:0.65rem;font-weight:800;padding:3px 7px;cursor:pointer;
               font-family:'Nunito',sans-serif;white-space:nowrap;">✏️ Edit</button>`;
-        const hasActions = viewBtn || editBtn;
+        const deleteBtn = canEdit ? `<button onclick="deleteFinanceEntry('${folder}','${e.id}')" style="
+          flex:0 0 52px;padding:11px 6px;background:#fff5f5;color:#dc2626;border:none;border-left:1px solid ${borderColor};
+          font-size:0.82rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;
+          min-height:44px;display:flex;align-items:center;justify-content:center;" title="Move to Trash">🗑️</button>` : '';
+        const hasActions = viewBtn || editBtn || deleteBtn;
         return `<div style="background:white;border:1.5px solid ${borderColor};border-radius:12px;overflow:hidden;">
           <div style="display:flex;align-items:flex-start;gap:10px;padding:13px 13px 10px;">
             <div style="width:4px;min-height:44px;border-radius:3px;background:${accentColor};flex-shrink:0;margin-top:1px;"></div>
@@ -5431,6 +5469,7 @@ function renderFinanceRecordsDetail(folder){
                   font-size:0.78rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;
                   min-height:44px;display:flex;align-items:center;justify-content:center;gap:5px;">✏️ Edit</button>`)
             : ''}
+            ${deleteBtn}
           </div>` : ''}
         </div>`;
       }).join('')}
@@ -5438,6 +5477,103 @@ function renderFinanceRecordsDetail(folder){
   }
 
   document.getElementById('dept-detail-body').innerHTML = addForm + listHtml;
+}
+
+// ── Offering Trash View ───────────────────────────────────────────
+function renderOfferingTrash(){
+  const items = _purgeExpiredOfferingTrash(); // auto-purge expired on open
+  const canEdit = isFinanceEditor();
+  const now = Date.now();
+  const BORDER = '#fca5a5';
+  const DARK   = '#991b1b';
+  const BG     = '#fff5f5';
+
+  const backBtn = `
+    <button onclick="renderFinanceRecordsDetail('offerings')" style="
+      display:inline-flex;align-items:center;gap:6px;margin-bottom:12px;
+      padding:7px 14px;background:#f1f5f9;border:1.5px solid #e2e8f0;border-radius:20px;
+      font-size:0.78rem;font-weight:800;color:#475569;cursor:pointer;font-family:'Nunito',sans-serif;">
+      ← Back to Offering
+    </button>`;
+
+  const headerBar = `
+    <div style="background:linear-gradient(135deg,#7f1d1d,#dc2626);border-radius:12px;padding:12px 16px;
+      display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+      <div>
+        <div style="font-family:'Cinzel',serif;font-size:0.82rem;font-weight:800;color:white;letter-spacing:0.06em;">
+          🗑️ OFFERING TRASH
+        </div>
+        <div style="font-size:0.66rem;color:#fca5a5;margin-top:2px;">
+          Items are permanently deleted after 14 days
+        </div>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="background:rgba(255,255,255,0.2);color:white;border-radius:20px;
+          padding:3px 10px;font-size:0.72rem;font-weight:800;">
+          ${items.length} item${items.length===1?'':'s'}
+        </span>
+        ${canEdit && items.length > 0 ? `<button onclick="emptyOfferingTrash()" style="
+          padding:5px 11px;background:white;color:#dc2626;border:none;border-radius:20px;
+          font-size:0.72rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
+          🗑️ Empty Trash
+        </button>` : ''}
+      </div>
+    </div>`;
+
+  let cardsHtml;
+  if(items.length === 0){
+    cardsHtml = `
+      <div style="text-align:center;padding:40px 20px;background:white;border:1.5px solid ${BORDER};border-radius:12px;">
+        <div style="font-size:2.5rem;margin-bottom:8px;">🗑️</div>
+        <div style="font-size:0.86rem;font-weight:700;color:#374151;">Trash is empty</div>
+        <div style="font-size:0.74rem;color:#9ca3af;margin-top:4px;">Deleted offering entries will appear here for 14 days.</div>
+      </div>`;
+  } else {
+    cardsHtml = `<div style="display:flex;flex-direction:column;gap:8px;">
+      ${items.map(function(e){
+        const msLeft   = _OFFERING_TRASH_TTL_MS - (now - (e.deletedAt||0));
+        const daysLeft = Math.max(0, Math.ceil(msLeft / (24*60*60*1000)));
+        const deletedOn = e.deletedAt ? new Date(e.deletedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+        return `<div style="background:white;border:1.5px solid ${BORDER};border-radius:12px;overflow:hidden;opacity:0.95;">
+          <div style="display:flex;align-items:flex-start;gap:10px;padding:13px 13px 10px;">
+            <div style="width:4px;min-height:44px;border-radius:3px;background:#dc2626;flex-shrink:0;margin-top:1px;"></div>
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;">
+                <span style="font-weight:800;font-size:1rem;color:${DARK};">$${(parseFloat(e.amount)||0).toLocaleString()}</span>
+                <span style="background:#fef2f2;color:#dc2626;border-radius:20px;padding:2px 8px;font-size:0.65rem;font-weight:800;">
+                  ⏳ ${daysLeft} day${daysLeft===1?'':'s'} left
+                </span>
+              </div>
+              <div style="font-size:0.84rem;color:#374151;margin-top:4px;">${esc(e.service||'—')}</div>
+              <div style="font-size:0.7rem;color:#9ca3af;margin-top:3px;">
+                📅 ${esc(e.date||'—')} &nbsp;·&nbsp; By: ${esc(e.enteredBy||'unknown')}
+              </div>
+              <div style="font-size:0.68rem;color:#ef4444;margin-top:3px;">
+                Deleted: ${deletedOn}
+              </div>
+              ${e.notes ? `<div style="font-size:0.72rem;color:#9ca3af;margin-top:2px;font-style:italic;">${esc(e.notes)}</div>` : ''}
+            </div>
+          </div>
+          ${canEdit ? `<div style="border-top:1px solid ${BORDER};display:flex;">
+            <button onclick="recoverOfferingEntry('${e.id}')" style="
+              flex:1;padding:11px 6px;background:#f0fdf4;color:#065f46;border:none;border-right:1px solid ${BORDER};
+              font-size:0.8rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;
+              min-height:44px;display:flex;align-items:center;justify-content:center;gap:5px;">
+              ♻️ Recover
+            </button>
+            <button onclick="deleteOfferingForever('${e.id}')" style="
+              flex:0 0 56px;padding:11px 6px;background:#fff5f5;color:#dc2626;border:none;
+              font-size:0.82rem;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;
+              min-height:44px;display:flex;align-items:center;justify-content:center;" title="Delete Forever">
+              ✕
+            </button>
+          </div>` : ''}
+        </div>`;
+      }).join('')}
+    </div>`;
+  }
+
+  document.getElementById('dept-detail-body').innerHTML = backBtn + headerBar + cardsHtml;
 }
 
 function viewCountBreakdown(entryId){
@@ -5606,12 +5742,59 @@ function saveFinanceEntry(folder){
 function deleteFinanceEntry(folder, entryId){
   if(!isFinanceEditor()){ showToast('🔒 Not permitted','error'); return; }
   if(folder === 'expenses'){
+    // Expenses: permanent delete (unchanged)
     saveFinanceExpenses(getFinanceExpenses().filter(e => e.id !== entryId));
+    showToast('🗑️ Expense deleted','success');
+    openFinanceFolder(folder);
   } else {
-    saveFinanceOfferings(getFinanceOfferings().filter(e => e.id !== entryId));
+    // Offerings: soft-delete → move to trash (14-day TTL)
+    var offerings = getFinanceOfferings();
+    var entry = offerings.find(function(e){ return e.id === entryId; });
+    if(!entry){ showToast('Entry not found.','error'); return; }
+    var trash = getOfferingTrash();
+    trash.unshift(Object.assign({}, entry, { deletedAt: Date.now() }));
+    saveOfferingTrash(trash);
+    saveFinanceOfferings(offerings.filter(function(e){ return e.id !== entryId; }));
+    showToast('🗑️ Moved to Trash — recoverable for 14 days','success');
+    renderFinanceRecordsDetail('offerings');
   }
-  showToast('🗑️ Entry deleted','success');
-  openFinanceFolder(folder);
+}
+
+// ── Recover offering from trash ───────────────────────────────────
+function recoverOfferingEntry(entryId){
+  if(!isFinanceEditor()){ showToast('🔒 Not permitted','error'); return; }
+  var trash = getOfferingTrash();
+  var item  = trash.find(function(e){ return e.id === entryId; });
+  if(!item){ showToast('Item not found in trash.','error'); return; }
+  // Restore: remove deletedAt and put back in offerings
+  var restored = Object.assign({}, item);
+  delete restored.deletedAt;
+  var offerings = getFinanceOfferings();
+  offerings.unshift(restored);
+  saveFinanceOfferings(offerings);
+  saveOfferingTrash(trash.filter(function(e){ return e.id !== entryId; }));
+  showToast('✅ Entry recovered to Offering folder','success');
+  renderOfferingTrash(); // refresh trash view
+}
+
+// ── Permanently delete one offering from trash ────────────────────
+function deleteOfferingForever(entryId){
+  if(!isFinanceEditor()){ showToast('🔒 Not permitted','error'); return; }
+  if(!confirm('Permanently delete this entry? This cannot be undone.')){ return; }
+  saveOfferingTrash(getOfferingTrash().filter(function(e){ return e.id !== entryId; }));
+  showToast('🗑️ Permanently deleted','success');
+  renderOfferingTrash();
+}
+
+// ── Empty the entire offering trash ──────────────────────────────
+function emptyOfferingTrash(){
+  if(!isFinanceEditor()){ showToast('🔒 Not permitted','error'); return; }
+  var cnt = getOfferingTrash().length;
+  if(!cnt){ showToast('Trash is already empty.','success'); return; }
+  if(!confirm('Permanently delete all '+cnt+' item(s) in the trash? This cannot be undone.')){ return; }
+  saveOfferingTrash([]);
+  showToast('🗑️ Trash emptied','success');
+  renderOfferingTrash();
 }
 
 // ── Finance Count / Hesabu ──
