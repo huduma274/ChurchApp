@@ -2376,11 +2376,11 @@ const DA=[
   {username:'grace',password:'Grace2026',displayName:'Grace',role:'super',
    permissions:{walawi:true,kawaida:true,ushuhuda:true,sendNote:true,receiveNote:true},
    access:{enabled:true,days:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59'},
-   windows:['schedules','departments'],departments:['ushers','financial','event','intercessors','elders']},
+   windows:['schedules','departments','wasimamizi','church-calendar','connecthub'],departments:['ushers','financial','event','intercessors','elders']},
   {username:'eric',password:'Eric2026',displayName:'Eric',role:'super',
    permissions:{walawi:true,kawaida:true,ushuhuda:true,sendNote:true,receiveNote:true},
    access:{enabled:true,days:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59'},
-   windows:['schedules','departments'],departments:['ushers','financial','event','intercessors','elders']},
+   windows:['schedules','departments','wasimamizi','church-calendar','connecthub'],departments:['ushers','financial','event','intercessors','elders']},
   {username:'Mizeituni',password:'Huduma2026',displayName:'Mizeituni',role:'regular',
    permissions:{walawi:false,kawaida:false,ushuhuda:true,sendNote:true,receiveNote:false},
    access:{enabled:true,days:[0,1,2,3,4,5,6],startTime:'00:00',endTime:'23:59'},
@@ -2433,6 +2433,25 @@ try {
 }
 if(!ld(K.admins,null)) sv(K.admins,DA);
 if(!ld(K.testimony,null)) sv(K.testimony,[]);
+// Migration: ensure all super admins have every built-in window in their windows array
+(function _migrateSuperAdminWindows(){
+  try{
+    var admins = ld(K.admins, null);
+    if(!admins) return;
+    var allBuiltinIds = ['schedules','departments','wasimamizi','church-calendar','connecthub'];
+    var changed = false;
+    admins.forEach(function(u){
+      if(u.role === 'super'){
+        var existing = u.windows || [];
+        allBuiltinIds.forEach(function(id){
+          if(!existing.includes(id)){ existing.push(id); changed = true; }
+        });
+        if(changed) u.windows = existing;
+      }
+    });
+    if(changed) sv(K.admins, admins);
+  }catch(e){}
+})();
 let CU=null;
 function loadSess(){
   try {
@@ -3290,11 +3309,12 @@ function addAdmin(){
   const nuWindowPerms = {};
   const wins = [];
   getWindowDefs().forEach(w=>{
-    const sel = document.querySelector(`input[name="nu-wperm-${w.id}"]:checked`);
-    const perm = sel ? sel.value : 'none';
+    const perm = r==='super' ? 'edit' : (document.querySelector(`input[name="nu-wperm-${w.id}"]:checked`)?.value || 'none');
     nuWindowPerms[w.id] = perm;
     if(perm !== 'none') wins.push(w.id);
   });
+  // Super admins always get every window
+  const finalWins = r==='super' ? getWindowDefs().map(w=>w.id) : (wins.length ? wins : ['schedules']);
   a.push({
     username:u, password:p, displayName:dn, role:r,
     permissions:{
@@ -3310,7 +3330,7 @@ function addAdmin(){
       startTime: document.getElementById('nu-start').value||'00:00',
       endTime: document.getElementById('nu-end').value||'23:59'
     },
-    windows: wins.length ? wins : ['schedules'],
+    windows: finalWins,
     windowPerms: nuWindowPerms,
     departments: []
   });
@@ -3358,15 +3378,18 @@ function openEditUser(i){
       <!-- Window Access -->
       <div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:10px;padding:11px;margin-bottom:10px;">
         <div class="sec-label" style="margin-bottom:8px;color:#1e40af;">🪟 Window Access</div>
-        <div style="font-size:0.7rem;color:#64748b;margin-bottom:8px;">Set each window to None (no access), View (read-only), or Edit (full edit).</div>
+        ${isSuper
+          ? `<div style="font-size:0.72rem;color:#15803d;font-weight:700;background:#dcfce7;border:1.5px solid #86efac;border-radius:7px;padding:7px 10px;margin-bottom:6px;">⭐ Super Admin — Full access to ALL windows (cannot be restricted)</div>`
+          : `<div style="font-size:0.7rem;color:#64748b;margin-bottom:8px;">Set each window to None (no access), View (read-only), or Edit (full edit).</div>`
+        }
         ${getWindowDefs().map(w=>{
-          const perm = (u.windowPerms||{})[w.id] || (uWindows.includes(w.id)?'view':'none');
+          const perm = isSuper ? 'edit' : ((u.windowPerms||{})[w.id] || (uWindows.includes(w.id)?'view':'none'));
           return `<div class="perm-row" style="margin-bottom:6px;">
             <span style="font-size:0.82rem;font-weight:700;">${w.icon} ${w.name}</span>
             <div style="display:flex;gap:4px;">
-              <label style="cursor:pointer;"><input type="radio" name="wperm-${w.id}" value="none"  ${perm==='none'?'checked':''} style="accent-color:#dc2626;"/> <span style="font-size:0.7rem;color:#dc2626;font-weight:700;">None</span></label>
-              <label style="cursor:pointer;margin-left:8px;"><input type="radio" name="wperm-${w.id}" value="view"  ${perm==='view'?'checked':''} style="accent-color:#0284c7;"/> <span style="font-size:0.7rem;color:#0284c7;font-weight:700;">View</span></label>
-              <label style="cursor:pointer;margin-left:8px;"><input type="radio" name="wperm-${w.id}" value="edit"  ${perm==='edit'?'checked':''} style="accent-color:#15803d;"/> <span style="font-size:0.7rem;color:#15803d;font-weight:700;">Edit</span></label>
+              <label style="cursor:pointer;${isSuper?'opacity:0.4;pointer-events:none;':''}"><input type="radio" name="wperm-${w.id}" value="none"  ${perm==='none'?'checked':''} style="accent-color:#dc2626;" ${isSuper?'disabled':''}/> <span style="font-size:0.7rem;color:#dc2626;font-weight:700;">None</span></label>
+              <label style="cursor:pointer;margin-left:8px;${isSuper?'opacity:0.4;pointer-events:none;':''}"><input type="radio" name="wperm-${w.id}" value="view"  ${perm==='view'?'checked':''} style="accent-color:#0284c7;" ${isSuper?'disabled':''}/> <span style="font-size:0.7rem;color:#0284c7;font-weight:700;">View</span></label>
+              <label style="cursor:pointer;margin-left:8px;"><input type="radio" name="wperm-${w.id}" value="edit"  ${perm==='edit'?'checked':''} style="accent-color:#15803d;" ${isSuper?'disabled':''}/> <span style="font-size:0.7rem;color:#15803d;font-weight:700;">Edit${isSuper?' ✓':''}</span></label>
             </div>
           </div>`;
         }).join('')}
@@ -3445,8 +3468,7 @@ function saveEditUser(){
   const windowPerms = {};
   const wins = [];
   getWindowDefs().forEach(w=>{
-    const sel = document.querySelector(`input[name="wperm-${w.id}"]:checked`);
-    const perm = sel ? sel.value : 'none';
+    const perm = r==='super' ? 'edit' : (document.querySelector(`input[name="wperm-${w.id}"]:checked`)?.value || 'none');
     windowPerms[w.id] = perm;
     if(perm !== 'none') wins.push(w.id);
   });
@@ -3465,7 +3487,8 @@ function saveEditUser(){
     startTime: document.getElementById('eu-start')?.value||'00:00',
     endTime:   document.getElementById('eu-end')?.value||'23:59'
   };
-  u.windows = wins.length ? wins : ['schedules'];
+  // Super admins always get every window
+  u.windows = r==='super' ? getWindowDefs().map(w=>w.id) : (wins.length ? wins : ['schedules']);
   u.windowPerms = windowPerms;
   u.departments = DEPT_DEFS.filter(d=>document.getElementById('eu-dept-'+d.id)?.checked).map(d=>d.id);
 
