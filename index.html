@@ -1402,6 +1402,24 @@ html, body {
     </div>
   </div>
 
+  <div id="force-chpw-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:999999;align-items:center;justify-content:center;padding:20px;">
+    <div style="background:white;border-radius:20px;width:100%;max-width:400px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+      <div style="background:linear-gradient(135deg,#f59e0b,#92400e);padding:22px 20px;text-align:center;">
+        <div style="font-size:2rem;margin-bottom:6px;">🔑</div>
+        <div style="font-family:'Cinzel',serif;font-size:1rem;font-weight:800;color:white;">Create Your Password</div>
+        <div style="font-size:0.78rem;color:rgba(255,255,255,0.8);margin-top:4px;">You're using a temporary password.<br>Please create your own password to continue.</div>
+      </div>
+      <div style="padding:22px 20px;">
+        <label class="field-label">New Password (min 6 characters)</label>
+        <input class="field-input" type="password" id="fchpw-new" placeholder="Create your new password..." autocomplete="new-password"/>
+        <label class="field-label">Confirm Password</label>
+        <input class="field-input" type="password" id="fchpw-confirm" placeholder="Repeat your new password..." autocomplete="new-password" onkeydown="if(event.key==='Enter')saveForceChangePw()"/>
+        <div id="fchpw-err" style="font-size:0.75rem;color:#dc2626;margin-bottom:12px;display:none;"></div>
+        <button onclick="saveForceChangePw()" style="width:100%;padding:14px;background:linear-gradient(135deg,#f59e0b,#92400e);color:white;border:none;border-radius:12px;font-family:'Cinzel',serif;font-size:0.85rem;font-weight:800;cursor:pointer;">✅ Save & Continue</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Sticky Note Write Modal -->
   <div class="sticky-modal-bg" id="sticky-modal-bg">
     <div class="sticky-modal">
@@ -2006,7 +2024,11 @@ html, body {
             <label class="field-label">Display Name</label>
             <input class="field-input" type="text" id="nu-dn" placeholder="e.g. Deacon James"/>
             <label class="field-label">Password</label>
-            <input class="field-input" type="password" id="nu-p" placeholder="Set a password"/>
+            <input class="field-input" type="password" id="nu-p" placeholder="Set a temporary password"/>
+            <label style="display:flex;align-items:center;gap:8px;margin:-6px 0 14px;cursor:pointer;">
+              <input type="checkbox" id="nu-temp" checked style="accent-color:#f59e0b;width:18px;height:18px;"/>
+              <span style="font-size:0.78rem;font-weight:700;color:#92400e;">🔑 Temporary password (user must change on first login)</span>
+            </label>
             <label class="field-label">Role</label>
             <select id="nu-r" onchange="toggleNewUserPerms()" style="width:100%;padding:11px 14px;border:2px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:0.9rem;outline:none;margin-bottom:14px;">
               <option value="view">👁️ View Only</option>
@@ -2404,6 +2426,7 @@ const FIREBASE_CONFIG = {
 const FB_NAMES_PATH     = 'mom-ministry/testimony/names';
 const FB_MATANGAZO_PATH = 'mom-ministry/matangazo/items';
 const FB_NOTES_PATH     = 'mom-ministry/stickyNotes';
+const FB_FORCE_LOGOUT_PATH = 'mom-ministry/forceLogout';
 const FB_HEADCOUNT_PATH = 'mom-ministry/headcount';
 // Additional paths — every key here gets two-way real-time sync
 const FB_ADMINS_PATH    = 'mom-ministry/admins';
@@ -2727,7 +2750,9 @@ function _runSignIn(user,pass){
       allAttempts[found.username]=uAttempts;
       sv(K.failedAttempts,allAttempts);
       logActivity({type:'login',username:found.username,displayName:found.displayName,ts,detail:'Signed in using default password after lockout'});
-      saveSess(found); goMain(); return;
+      saveSess(found);
+      if(found.tempPassword){ goMain(); setTimeout(showForceChangePw, 300); } else { goMain(); }
+      return;
     }
     err.innerHTML='🔒 Account temporarily locked after 3 failed attempts.<br><small>Contact your Super Admin to unlock, or use your default password.</small>';
     err.style.display='block';
@@ -2785,7 +2810,9 @@ function _runSignIn(user,pass){
       allAttempts[found.username]={count:0,lastTs:null,locked:false};
       sv(K.failedAttempts,allAttempts);
       logActivity({type:'login',username:found.username,displayName:found.displayName,ts,detail:'Signed in using default password'});
-      saveSess(found); goMain(); return;
+      saveSess(found);
+      if(found.tempPassword){ goMain(); setTimeout(showForceChangePw, 300); } else { goMain(); }
+      return;
     }
     uAttempts.count++;
     uAttempts.lastTs = Date.now();
@@ -2821,7 +2848,13 @@ function _runSignIn(user,pass){
     sv(K.failedAttempts, allAttempts);
   }
   logActivity({type:'login',username:found.username,displayName:found.displayName,ts,detail:'Successful login'});
-  saveSess(found); goMain();
+  saveSess(found);
+  if(found.tempPassword){
+    goMain();
+    setTimeout(showForceChangePw, 300);
+  } else {
+    goMain();
+  }
 }
 
 // ── Activity & Security Log ──
@@ -2847,6 +2880,23 @@ function unlockUser(username){
   logActivity({type:'login',username,ts,detail:'Account unlocked by Super Admin ('+CU.displayName+')'});
   showToast('🔓 @'+username+' unlocked','success');
   renderActivityLog(); renderUsers();
+}
+
+function forceSignOutUser(username){
+  if(!CU || CU.role!=='super') return showToast('Super Admins only','error');
+  showModal('Force Sign Out','Force sign out @'+username+' from all devices? This will immediately end their session.',function(){
+    var ts = Date.now();
+    // Write force-logout signal to Firebase
+    if(_fbDb){
+      _fbDb.ref(FB_FORCE_LOGOUT_PATH+'/'+username).set(ts).then(function(){
+        logActivity({type:'security',username:CU.username,displayName:CU.displayName,ts:new Date().toLocaleString(),
+          detail:'Force signed out @'+username+' from all devices'});
+        showToast('🚪 @'+username+' has been signed out from all devices','success');
+      }).catch(function(e){ showToast('Error: '+e.message,'error'); });
+    } else {
+      showToast('Firebase not connected — cannot force sign out remotely','error');
+    }
+  });
 }
 
 function renderActivityLog(){
@@ -3658,7 +3708,7 @@ function renderUsers(){
           ${esc(u.displayName)}
           <span style="font-size:0.65rem;font-weight:800;padding:2px 8px;border-radius:20px;background:${roleBg};color:${roleColor};">${roleLabel}</span>
         </strong>
-        <span style="font-size:0.72rem;color:var(--text-light);">@${esc(u.username)}${!u.password?' · 🔑 No password set':''}</span>
+        <span style="font-size:0.72rem;color:var(--text-light);">@${esc(u.username)}${!u.password?' · 🔑 No password set':''}${u.tempPassword?' · <span style="color:#f59e0b;font-weight:800;">🔑 Temp Password</span>':''}</span>
         <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
           ${accessStatus}${failCount}
           <span style="font-size:0.68rem;color:var(--text-light);">📅 ${daysStr}</span>
@@ -3673,6 +3723,7 @@ function renderUsers(){
             </div>`
           : `<div style="display:flex;gap:5px;flex-wrap:wrap;">
               ${isLocked ? `<button style="padding:4px 10px;border:1.5px solid #dc2626;background:#fee2e2;color:#dc2626;border-radius:8px;font-size:0.71rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;" onclick="unlockUser('${esc(u.username)}')">🔓 Unlock</button>` : ''}
+              <button style="padding:4px 10px;border:1.5px solid #f59e0b;background:#fef3c7;color:#92400e;border-radius:8px;font-size:0.71rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;" onclick="forceSignOutUser('${esc(u.username)}')" title="Force sign out from all devices">🚪 Sign Out</button>
               <button style="padding:4px 10px;border:1.5px solid var(--blue-bright);background:var(--blue-pale);color:var(--blue-deep);border-radius:8px;font-size:0.71rem;font-weight:700;cursor:pointer;font-family:'Nunito',sans-serif;" onclick="openEditUser(${i})">✏️ Edit</button>
               <button class="btn-dang" onclick="remUser(${i})">✕ Remove</button>
             </div>`
@@ -3709,6 +3760,7 @@ function addAdmin(){
   const finalWins = r==='super' ? getWindowDefs().map(w=>w.id) : (wins.length ? wins : ['schedules']);
   a.push({
     username:u, password:p, displayName:dn, role:r,
+    tempPassword: document.getElementById('nu-temp').checked,
     permissions:{
       walawi: r==='super'||document.getElementById('p-w').checked,
       kawaida: r==='super'||document.getElementById('p-k').checked,
@@ -3804,6 +3856,10 @@ function openEditUser(i){
         <input class="field-input" type="password" id="eu-pw1" placeholder="New password..." autocomplete="new-password" style="margin-bottom:7px;"/>
         <input class="field-input" type="password" id="eu-pw2" placeholder="Confirm password..." autocomplete="new-password" style="margin-bottom:0;"/>
         <div id="eu-pw-err" style="font-size:0.72rem;color:#dc2626;margin-top:4px;display:none;"></div>
+        <label style="display:flex;align-items:center;gap:8px;margin:8px 0 0;cursor:pointer;">
+          <input type="checkbox" id="eu-temp" ${u.tempPassword?'checked':''} style="accent-color:#f59e0b;width:18px;height:18px;"/>
+          <span style="font-size:0.76rem;font-weight:700;color:#92400e;">🔑 Temp password (force change on next login)</span>
+        </label>
       </div>
 
       <!-- Default Password — super admin only -->
@@ -3904,6 +3960,8 @@ function saveEditUser(){
     if(defPw.length < 6){ showToast('Default password must be at least 6 characters','error'); return; }
     u.defaultPassword = defPw;
   }
+
+  u.tempPassword = document.getElementById('eu-temp')?.checked || false;
 
   sv(K.admins,a);
   if(CU && CU.username===u.username){ saveSess(u); }
@@ -8908,6 +8966,38 @@ function saveChangePw(){
   showToast('✅ Password updated successfully','success');
 }
 
+function showForceChangePw(){
+  document.getElementById('force-chpw-modal').style.display='flex';
+  const err=document.getElementById('fchpw-err');
+  if(err){err.textContent='';err.style.display='none';}
+  document.getElementById('fchpw-new').value='';
+  document.getElementById('fchpw-confirm').value='';
+  setTimeout(()=>document.getElementById('fchpw-new')?.focus(),100);
+}
+
+function saveForceChangePw(){
+  if(!CU) return;
+  const newPw=document.getElementById('fchpw-new')?.value||'';
+  const confirm=document.getElementById('fchpw-confirm')?.value||'';
+  const err=document.getElementById('fchpw-err');
+  const showErr=(msg)=>{if(err){err.textContent=msg;err.style.display='block';}};
+  if(newPw.length<6){showErr('❌ Password must be at least 6 characters.');return;}
+  if(newPw!==confirm){showErr('❌ Passwords do not match.');return;}
+  const admins=ld(K.admins,[]);
+  const idx=admins.findIndex(a=>a.username===CU.username);
+  if(idx<0){showErr('User not found.');return;}
+  admins[idx].password=newPw;
+  admins[idx].tempPassword=false;
+  sv(K.admins,admins);
+  CU=admins[idx];
+  saveSess(CU);
+  document.getElementById('force-chpw-modal').style.display='none';
+  showToast('✅ Password created successfully! Welcome.','success');
+  logActivity({type:'security',username:CU.username,displayName:CU.displayName,ts:new Date().toLocaleString(),
+    detail:'Changed temporary password — set new password'});
+  goMain();
+}
+
 // ═══════════════════════════════════════════════════════════════
 // ── WASIMAMIZI SCHEDULE SYSTEM ──
 // ═══════════════════════════════════════════════════════════════
@@ -13147,6 +13237,26 @@ document.addEventListener('DOMContentLoaded', function(){
       }
     }, function(err){
       console.warn('[MOM] Firebase headcount listener error:', err);
+    });
+
+    // ── Force Logout Listener ─────────────────────────────────────
+    // If a super admin triggers force sign-out, this listener catches it
+    // and logs out the affected user on this device immediately.
+    _fbDb.ref(FB_FORCE_LOGOUT_PATH).on('value', function(snap){
+      var data = snap.val();
+      if(!data || typeof data !== 'object') return;
+      if(!CU) return;
+      var myLogout = data[CU.username];
+      if(myLogout){
+        // Check if this is a recent force-logout (within last 60 seconds)
+        var age = Date.now() - myLogout;
+        if(age < 60000){
+          // Clear the signal for this user so it doesn't fire again
+          _fbDb.ref(FB_FORCE_LOGOUT_PATH+'/'+CU.username).remove();
+          showToast('🚪 Your session was ended by an administrator','error');
+          setTimeout(function(){ doSignOut(); }, 1500);
+        }
+      }
     });
 
     // ── Helper: generic listener factory ─────────────────────────
