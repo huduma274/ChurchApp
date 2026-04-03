@@ -2398,6 +2398,11 @@ html, body {
   </div>
 </div>
 <script>
+
+
+
+
+
 const K={admins:'mom_a6',testimony:'mom_t4',walawi:'mom_w4',kawaida:'mom_k4',session:'mom_s4',headers:'mom_h4',
   draftW:'mom_dw4',draftK:'mom_dk4',draftT:'mom_dt4',draftStatus:'mom_ds4',settings:'mom_cfg4',
   eventWalawi:'mom_evw1',eventKawaida:'mom_evk1',eventTestimony:'mom_evt1',
@@ -2448,6 +2453,8 @@ const FB_BG_PATH        = 'mom-ministry/branding/background';
 const FB_FIN_EXPENSES_PATH    = 'mom-ministry/finance/expenses';
 const FB_FIN_OFFERINGS_PATH   = 'mom-ministry/finance/offerings';
 const FB_FIN_EDIT_REQS_PATH   = 'mom-ministry/finance/edit-requests';
+const FB_FIN_BILLS_DEFS_PATH    = 'mom-ministry/finance/bills-defs';
+const FB_FIN_BILLS_RECORDS_PATH = 'mom-ministry/finance/bills-records';
 const FB_CH_HQ_PATH           = 'mom-ministry/connecthub/hq';
 const FB_CH_ONLINE_PATH       = 'mom-ministry/connecthub/online';
 const FB_CH_MASTER_PATH       = 'mom-ministry/connecthub/master';
@@ -2483,6 +2490,8 @@ const K_FIN_EXPENSES        = 'mom_fin_expenses_v1';
 const K_FIN_OFFERINGS       = 'mom_fin_offerings_v1';
 const K_FIN_OFFERING_TRASH  = 'mom_fin_offering_trash_v1';   // soft-delete bin (14-day TTL)
 const K_FIN_EDIT_REQS       = 'mom_fin_edit_reqs_v1';
+const K_FIN_BILLS_DEFS      = 'mom_fin_bills_defs_v1';
+const K_FIN_BILLS_RECORDS   = 'mom_fin_bills_records_v1';
 const K_CH_HQ          = 'mom_ch_hq_v1';
 const K_CH_ONLINE      = 'mom_ch_online_v1';
 const K_CH_MASTER      = 'mom_ch_master_v1';
@@ -2515,7 +2524,9 @@ const _FB_PATHS = {
   [K_BG]          : FB_BG_PATH,
   [K_FIN_EXPENSES]  : FB_FIN_EXPENSES_PATH,
   [K_FIN_OFFERINGS] : FB_FIN_OFFERINGS_PATH,
-  [K_FIN_EDIT_REQS] : FB_FIN_EDIT_REQS_PATH,
+  [K_FIN_EDIT_REQS]        : FB_FIN_EDIT_REQS_PATH,
+  [K_FIN_BILLS_DEFS]       : FB_FIN_BILLS_DEFS_PATH,
+  [K_FIN_BILLS_RECORDS]    : FB_FIN_BILLS_RECORDS_PATH,
   [K_CH_HQ]         : FB_CH_HQ_PATH,
   [K_CH_ONLINE]     : FB_CH_ONLINE_PATH,
   [K_CH_MASTER]     : FB_CH_MASTER_PATH,
@@ -3049,6 +3060,8 @@ function goMain(){
   setTimeout(function(){ if(window._stickyNoteInit) window._stickyNoteInit(); }, 150);
   // Auto-submit monthly report silently on login (day 5+ of month, previous month not yet submitted)
   setTimeout(checkMonthlyReportReminder, 1200);
+  // Initialize bills on first login
+  _initializeBillsIfNeeded();
 }
 function switchTab(n){
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
@@ -3745,6 +3758,7 @@ function addAdmin(){
   const p=document.getElementById('nu-p').value;
   const r=document.getElementById('nu-r').value;
   if(!u||!p)return showToast('Fill username & password','error');
+  if(/\s/.test(u))return showToast('Username cannot contain spaces','error');
   const a=ld(K.admins,[]);
   if(a.length>=MAX_USERS)return showToast('❌ Maximum 500 users reached!','error');
   if(a.find(x=>x.username.toLowerCase()===u.toLowerCase()))return showToast('Username already exists!','error');
@@ -3801,6 +3815,9 @@ function openEditUser(i){
 
   document.getElementById('edit-user-body').innerHTML=`
     <div style="margin-bottom:10px;">
+      <div class="field-label">Username</div>
+      <input class="field-input" id="eu-un" value="${esc(u.username)}" placeholder="No spaces allowed" oninput="this.value=this.value.replace(/\\s/g,'')" style="margin-bottom:4px;"/>
+      <div style="font-size:0.7rem;color:#64748b;margin-bottom:8px;">⚠️ Changing the username will sign out this user on all devices.</div>
       <div class="field-label">Display Name</div>
       <input class="field-input" id="eu-dn" value="${esc(u.displayName)}" style="margin-bottom:8px;"/>
       <div class="field-label">Role</div>
@@ -3922,6 +3939,20 @@ function saveEditUser(){
     windowPerms[w.id] = perm;
     if(perm !== 'none') wins.push(w.id);
   });
+  // Validate & update username
+  const newUn = (document.getElementById('eu-un')?.value||'').trim();
+  if(!newUn){ showToast('Username cannot be empty','error'); return; }
+  if(/\s/.test(newUn)){ showToast('Username cannot contain spaces','error'); return; }
+  const oldUn = u.username;
+  if(newUn.toLowerCase() !== oldUn.toLowerCase()){
+    // Check for duplicates
+    if(a.find((x,xi)=>xi!==_editIdx && x.username.toLowerCase()===newUn.toLowerCase())){
+      showToast('Username already taken','error'); return;
+    }
+    u.username = newUn;
+    // If current user renamed themselves, update session
+    if(CU && CU.username===oldUn){ CU.username=newUn; saveSess(CU); }
+  }
   u.displayName=document.getElementById('eu-dn').value.trim()||u.displayName;
   u.role=r;
   u.permissions={
@@ -3966,7 +3997,7 @@ function saveEditUser(){
   sv(K.admins,a);
   if(CU && CU.username===u.username){ saveSess(u); }
   closeEditUser(); renderUsers();
-  showToast('✅ User updated: '+u.displayName,'success');
+  showToast('✅ User updated: '+u.displayName+' (@'+u.username+')','success');
 }
 let _tt;
 function showToast(msg,type=''){
@@ -5604,8 +5635,648 @@ function openFinanceDept(){
           <div style="font-size:0.74rem;font-weight:400;opacity:0.75;font-family:'Nunito',sans-serif;margin-top:3px;">Monthly &amp; Weekly Financial Report — Printable PDF</div>
         </div>
       </button>
+
     </div>`;
 }
+
+// ── BILLS REPORTING ─────────────────────────────────────────────
+
+const BILL_MONTHS     = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const BILL_MONTHS_FULL= ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function getBillsDefs(){ return ld(K_FIN_BILLS_DEFS, []); }
+function getBillsRecords(){ return ld(K_FIN_BILLS_RECORDS, []); }
+function saveBillsDefs(arr){ sv(K_FIN_BILLS_DEFS, arr); }
+function saveBillsRecords(arr){ sv(K_FIN_BILLS_RECORDS, arr); }
+
+function moveBillUp(defId){
+  var defs = getBillsDefs();
+  var idx = defs.findIndex(function(d){ return d.id===defId; });
+  if(idx > 0){
+    var temp = defs[idx];
+    defs[idx] = defs[idx-1];
+    defs[idx-1] = temp;
+    saveBillsDefs(defs);
+    renderBillsView(_billsYear);
+  }
+}
+
+function moveBillDown(defId){
+  var defs = getBillsDefs();
+  var idx = defs.findIndex(function(d){ return d.id===defId; });
+  if(idx < defs.length-1){
+    var temp = defs[idx];
+    defs[idx] = defs[idx+1];
+    defs[idx+1] = temp;
+    saveBillsDefs(defs);
+    renderBillsView(_billsYear);
+  }
+}
+
+var _draggedBillId = null;
+var _draggedOverBillId = null;
+
+function billDragStart(e){
+  _draggedBillId = e.currentTarget.getAttribute('data-bill-id');
+  e.currentTarget.style.opacity = '0.6';
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function billDragOver(e){
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var billId = e.currentTarget.getAttribute('data-bill-id');
+  if(billId && billId !== _draggedBillId){
+    _draggedOverBillId = billId;
+    e.currentTarget.style.borderTop = '3px solid #2563eb';
+  }
+}
+
+function billDragLeave(e){
+  e.currentTarget.style.borderTop = '';
+}
+
+function billDrop(e){
+  e.preventDefault();
+  e.stopPropagation();
+  var targetBillId = e.currentTarget.getAttribute('data-bill-id');
+  e.currentTarget.style.borderTop = '';
+
+  if(_draggedBillId && targetBillId && _draggedBillId !== targetBillId){
+    var defs = getBillsDefs();
+    var dragIdx = defs.findIndex(function(d){ return d.id===_draggedBillId; });
+    var targetIdx = defs.findIndex(function(d){ return d.id===targetBillId; });
+
+    if(dragIdx !== -1 && targetIdx !== -1){
+      var temp = defs[dragIdx];
+      defs[dragIdx] = defs[targetIdx];
+      defs[targetIdx] = temp;
+      saveBillsDefs(defs);
+      renderBillsView(_billsYear);
+      showToast('Bill order updated','success');
+    }
+  }
+}
+
+function billDragEnd(e){
+  e.currentTarget.style.opacity = '1';
+  e.currentTarget.style.borderTop = '';
+  _draggedBillId = null;
+  _draggedOverBillId = null;
+}
+
+var _billsYear = new Date().getFullYear();
+var _billsModalCb = null;
+
+function closeBillsModal(){
+  var m = document.getElementById('bills-modal');
+  if(m){ m.style.display = 'none'; }
+  _billsModalCb = null;
+}
+function runBillsModal(){
+  try {
+    if(_billsModalCb){ var r = _billsModalCb(); if(r === false) return; }
+    closeBillsModal();
+  } catch(e){
+    showToast('Error saving: '+e.message, 'error');
+    console.error('runBillsModal error:', e);
+  }
+}
+function openBillsModal(title, bodyHtml, cb){
+  document.getElementById('bills-modal-title').textContent = title;
+  document.getElementById('bills-modal-body').innerHTML = bodyHtml;
+  _billsModalCb = cb || null;
+  var saveBtn = document.getElementById('bills-modal-save');
+  if(saveBtn) saveBtn.style.display = cb ? '' : 'none';
+  document.getElementById('bills-modal').style.display = 'flex';
+}
+
+function openFinanceBills(){
+  document.getElementById('dept-detail-name').textContent = 'Bills';
+  document.getElementById('dept-detail-icon').textContent = '\u{1F9FE}';
+  document.getElementById('dept-detail-badge').textContent = 'Reporting';
+  var backBtn = document.querySelector('.dept-back-btn');
+  if(backBtn){ backBtn.textContent = '\u2190 Back to Records'; backBtn.onclick = openFinanceRecordsHome; }
+  renderBillsView(new Date().getFullYear());
+}
+
+function renderBillsView(year){
+  _billsYear = year;
+  var canEdit = isFinanceEditor();
+  var defs = getBillsDefs().filter(function(d){ return d.active !== false; });
+  var records = getBillsRecords();
+  var now = new Date();
+  var currentYear = now.getFullYear();
+  var currentMonth = now.getMonth() + 1;
+
+  // Auto-create subscription payments for current month
+  if(canEdit){
+    var subCreated = false;
+    defs.forEach(function(def){
+      if((def.subscriptionType === 'monthly' || def.subscriptionType === 'yearly') && def.recurringAmount){
+        var existing = records.find(function(r){
+          return r.billId === def.id && r.year === currentYear && r.month === currentMonth;
+        });
+        if(!existing){
+          records.push({
+            id: (Date.now()+'_'+Math.random().toString(36).slice(2,7)),
+            billId: def.id, billName: def.name,
+            year: currentYear, month: currentMonth,
+            dueDate: currentYear+'-'+String(currentMonth).padStart(2,'0')+'-'+String(def.dueDayOfMonth||1).padStart(2,'0'),
+            paidBy: 'Auto-paid (Subscription)',
+            amountCents: Math.round(def.recurringAmount*100),
+            confirmationRef: 'Auto', notes: 'Automatic subscription payment',
+            paid: true, timestamp: Date.now()
+          });
+          subCreated = true;
+        }
+      }
+    });
+    if(subCreated){
+      saveBillsRecords(records);
+    }
+  }
+
+  // Collect overdue unpaid cells
+  var overdueItems = [];
+  defs.forEach(function(def){
+    for(var m = 1; m <= 12; m++){
+      if(year > currentYear) break;
+      if(year === currentYear && m > currentMonth) break;
+      var rec = records.find(function(r){ return r.billId === def.id && r.year === year && r.month === m; });
+      if(!rec || !rec.paid){
+        var dd = new Date(year, m-1, def.dueDayOfMonth||1);
+        if(dd <= now) overdueItems.push(def.name + ' (' + BILL_MONTHS[m-1] + ')');
+      }
+    }
+  });
+
+  // Overdue banner (only show from 1st to 5th of month)
+  var overdueBanner = '';
+  var dayOfMonth = now.getDate();
+  if(overdueItems.length && dayOfMonth >= 1 && dayOfMonth <= 5){
+    overdueBanner = '<div style="background:#fee2e2;border:2px solid #fca5a5;border-radius:12px;padding:12px 16px;margin-bottom:14px;">'
+      + '<div style="font-weight:800;font-size:0.83rem;color:#dc2626;margin-bottom:5px;">\u26A0\uFE0F '+overdueItems.length+' Unpaid Bill'+(overdueItems.length>1?'s':'')+' Due / Overdue</div>'
+      + '<div style="font-size:0.72rem;color:#991b1b;">'+overdueItems.join(' &nbsp;\u00B7&nbsp; ')+'</div>'
+      + '</div>';
+  }
+
+  // Build table header months
+  var thMonths = BILL_MONTHS.map(function(mo, i){
+    var isCurrentMo = (year === currentYear && (i+1) === currentMonth);
+    return '<th style="padding:9px 4px;text-align:center;font-size:0.68rem;font-weight:800;white-space:nowrap;min-width:72px;'
+      + (isCurrentMo ? 'background:#312e81;' : '') + '">' + mo + '</th>';
+  }).join('');
+
+  // Build rows
+  var grandTotal = 0;
+  var monthTotals = [0,0,0,0,0,0,0,0,0,0,0,0];
+  var tbodyRows = '';
+
+  if(defs.length === 0){
+    tbodyRows = '<tr><td colspan="15" style="text-align:center;padding:36px;color:#94a3b8;font-size:0.85rem;">'
+      + '\uD83E\uDDFE No bills added yet. Click &quot;+ Add Bill&quot; to create your first bill row.'
+      + '</td></tr>';
+  } else {
+    defs.forEach(function(def, di){
+      var rowBg = di % 2 === 0 ? '#ffffff' : '#fafbff';
+      var rowTotal = 0;
+      var cells = '';
+
+      for(var m = 1; m <= 12; m++){
+        var rec = records.find(function(r){ return r.billId === def.id && r.year === year && r.month === m; });
+        var isFuture = year > currentYear || (year === currentYear && m > currentMonth);
+        var isOverdue = !isFuture && (!rec || !rec.paid);
+
+        if(rec && rec.paid){
+          var amt = (rec.amountCents||0) / 100;
+          rowTotal += amt; monthTotals[m-1] += amt;
+          var amtStr = '$'+amt.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+          cells += '<td onclick="openBillCell(\''+def.id+'\',\''+def.name.replace(/'/g,"\\'").replace(/\\/g,'\\\\')+'\','+year+','+m+')" '
+            + 'style="cursor:pointer;padding:5px 4px;background:#dcfce7;text-align:center;vertical-align:top;border:1px solid #e2e8f0;">'
+            + '<div style="font-size:0.72rem;font-weight:800;color:#15803d;">'+amtStr+'</div>'
+            + '<div style="font-size:0.6rem;color:#166534;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:68px;margin:0 auto;">'+esc(rec.paidBy||'')+'</div>'
+            + '<div style="margin-top:2px;"><span style="font-size:0.58rem;background:#bbf7d0;color:#14532d;border-radius:10px;padding:1px 4px;font-weight:800;">\u2705 Paid</span></div>'
+            + '</td>';
+        } else if(isFuture){
+          cells += '<td style="padding:5px 4px;text-align:center;color:#cbd5e1;font-size:0.7rem;border:1px solid #e2e8f0;">\u2014</td>';
+        } else {
+          var _dd = def.dueDayOfMonth||1; var _ds = _dd===1?'st':_dd===2?'nd':_dd===3?'rd':'th';
+          var dueLbl = 'Due '+_dd+_ds;
+          var cellBg = isOverdue ? '#fef2f2' : '#fffbeb';
+          var cellClr = isOverdue ? '#dc2626' : '#92400e';
+          cells += canEdit
+            ? '<td onclick="openBillCell(\''+def.id+'\',\''+def.name.replace(/'/g,"\\'").replace(/\\/g,'\\\\')+'\','+year+','+m+')" '
+                + 'style="cursor:pointer;padding:5px 4px;background:'+cellBg+';text-align:center;vertical-align:top;border:1px solid #e2e8f0;" title="Click to record payment">'
+                + '<div style="font-size:0.65rem;font-weight:800;color:'+cellClr+';">'+(isOverdue?'\u26A0\uFE0F ':'')+dueLbl+'</div>'
+                + '</td>'
+            : '<td style="padding:5px 4px;background:'+cellBg+';text-align:center;font-size:0.65rem;color:'+cellClr+';border:1px solid #e2e8f0;">'+(isOverdue?'\u26A0\uFE0F ':'')+dueLbl+'</td>';
+        }
+      }
+      grandTotal += rowTotal;
+
+      tbodyRows += '<tr draggable="'+(canEdit?'true':'false')+'" data-bill-id="'+def.id+'" ondragstart="billDragStart(event)" ondragover="billDragOver(event)" ondrop="billDrop(event)" ondragleave="billDragLeave(event)" ondragend="billDragEnd(event)" style="background:'+rowBg+';'+(canEdit?'cursor:grab;':'')+'cursor:grab;">'
+        + '<td style="padding:7px 10px;font-weight:800;font-size:0.88rem;color:#1e293b;position:sticky;left:0;background:'+rowBg+';z-index:1;border:1px solid #e2e8f0;min-width:130px;">'
+          + '<div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'+esc(def.name)+'</div>'
+          + (def.description ? '<div style="font-size:0.73rem;color:#2563eb;font-weight:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px;">'+esc(def.description)+'</div>' : '')
+          + '<div style="display:flex;gap:3px;margin-top:3px;">'
+            + (def.phoneNumber || def.accountNumber ? '<button onclick="showBillContactInfo(\''+def.id+'\', \''+esc(def.name)+'\')" style="flex:1;padding:2px 4px;font-size:0.65rem;border:1px solid #86efac;border-radius:3px;cursor:pointer;background:#f0fdf4;color:#16a34a;font-family:\'Nunito\',sans-serif;font-weight:700;">\u260E\uFE0F Contact</button>' : '')
+            + (canEdit ? '<button onclick="editBillDef(\''+def.id+'\')" style="flex:1;padding:2px 4px;font-size:0.65rem;border:1px solid #c4b5fd;border-radius:3px;cursor:pointer;background:#ede9fe;color:#5b21b6;font-family:\'Nunito\',sans-serif;font-weight:700;">\u270F\uFE0F Edit</button>' : '')
+          + '</div>'
+        + '</td>'
+        + '<td style="padding:7px 8px;text-align:center;font-size:0.72rem;font-weight:700;color:#4c1d95;white-space:nowrap;border:1px solid #e2e8f0;background:'+rowBg+';">'
+          + (function(){ var _d=def.dueDayOfMonth||0; if(!_d) return '\u2014'; var _s=_d===1?'st':_d===2?'nd':_d===3?'rd':'th'; return _d+'<sup style="font-size:0.55rem;">'+_s+'</sup>'; })()
+        + '</td>'
+        + cells
+        + '<td style="padding:7px 8px;text-align:right;font-weight:900;font-size:0.78rem;color:#1e293b;background:#f1f5f9;white-space:nowrap;border:1px solid #e2e8f0;">'
+          + '$'+rowTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})
+        + '</td>'
+        + '</tr>';
+    });
+
+    // Totals row
+    var totalCells = monthTotals.map(function(t){
+      return '<td style="padding:7px 4px;text-align:center;font-weight:800;font-size:0.72rem;color:#1e40af;background:#dbeafe;border:1px solid #bfdbfe;">'
+        + (t > 0 ? '$'+t.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}) : '\u2014') + '</td>';
+    }).join('');
+    tbodyRows += '<tr style="border-top:2px solid #1e40af;">'
+      + '<td style="padding:7px 10px;font-weight:900;font-size:0.78rem;color:#1e40af;position:sticky;left:0;background:#eff6ff;z-index:1;border:1px solid #bfdbfe;">TOTAL</td>'
+      + '<td style="background:#eff6ff;border:1px solid #bfdbfe;"></td>'
+      + totalCells
+      + '<td style="padding:7px 8px;text-align:right;font-weight:900;font-size:0.82rem;color:#1e40af;background:#dbeafe;border:1px solid #bfdbfe;">$'+grandTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</td>'
+      + '</tr>';
+  }
+
+  document.getElementById('dept-detail-body').innerHTML =
+    '<div>'
+    + overdueBanner
+    + '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px;">'
+      + '<div style="display:flex;align-items:center;gap:8px;">'
+        + '<button onclick="renderBillsView('+(year-1)+')" style="padding:5px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:1rem;cursor:pointer;background:white;font-family:\'Nunito\',sans-serif;">\u2039</button>'
+        + '<span style="font-family:\'Cinzel\',serif;font-size:1.1rem;font-weight:800;color:#1e293b;">'+year+'</span>'
+        + '<button onclick="renderBillsView('+(year+1)+')" style="padding:5px 12px;border:2px solid #e2e8f0;border-radius:8px;font-size:1rem;cursor:pointer;background:white;font-family:\'Nunito\',sans-serif;">\u203A</button>'
+      + '</div>'
+      + (canEdit ? '<button onclick="openAddBillDef()" style="padding:8px 16px;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:white;border:none;border-radius:10px;font-size:0.8rem;font-weight:800;cursor:pointer;font-family:\'Nunito\',sans-serif;">+ Add Bill</button>' : '')
+    + '</div>'
+    + '<div style="overflow-x:auto;border-radius:12px;border:1.5px solid #e2e8f0;">'
+      + '<table style="width:100%;border-collapse:collapse;font-family:\'Nunito\',sans-serif;">'
+        + '<thead>'
+          + '<tr style="background:linear-gradient(135deg,#4c1d95,#5b21b6);color:white;">'
+            + '<th style="padding:10px 10px;text-align:left;font-size:0.72rem;font-weight:800;position:sticky;left:0;background:#4c1d95;z-index:2;white-space:nowrap;min-width:130px;">Bill Name</th>'
+            + '<th style="padding:10px 8px;text-align:center;font-size:0.68rem;font-weight:800;white-space:nowrap;min-width:52px;">Due Date</th>'
+            + thMonths
+            + '<th style="padding:10px 8px;text-align:right;font-size:0.72rem;font-weight:800;white-space:nowrap;">Year Total</th>'
+          + '</tr>'
+        + '</thead>'
+        + '<tbody>'+tbodyRows+'</tbody>'
+      + '</table>'
+    + '</div>'
+    + '<div style="margin-top:12px;background:linear-gradient(135deg,#4c1d95,#5b21b6);color:white;border-radius:12px;padding:14px 20px;display:flex;justify-content:space-between;align-items:center;">'
+      + '<div><div style="font-family:\'Cinzel\',serif;font-size:0.83rem;font-weight:800;letter-spacing:0.05em;">YEAR TO DATE ('+year+')</div>'
+        + '<div style="font-size:0.7rem;opacity:0.8;margin-top:2px;">Total bills paid this year</div></div>'
+      + '<div style="font-family:\'Cinzel\',serif;font-size:1.5rem;font-weight:900;">$'+grandTotal.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>'
+    + '</div>'
+    + '</div>';
+}
+
+// Click a month cell — open add or edit
+function openBillCell(billId, billName, year, month){
+  var rec = getBillsRecords().find(function(r){ return r.billId===billId && r.year===year && r.month===month; });
+  if(rec) openEditBillRecord(rec.id);
+  else openAddBillRecord(billId, billName, year, month);
+}
+
+function getFinanceMembers(){
+  var all = ld(K.admins, DA);
+  return all.filter(function(u){ return u.role==='super' || u.role==='admin'; });
+}
+function _buildPaidByOptions(selected){
+  var members = getFinanceMembers();
+  var opts = '<option value="">Select person who paid...</option>';
+  members.forEach(function(m){
+    var val = m.displayName || m.username;
+    opts += '<option value="'+esc(val)+'"'+(selected===val?' selected':'')+'>'+esc(val)+'</option>';
+  });
+  return opts;
+}
+
+// Add new bill row
+function openAddBillDef(){
+  var today = new Date();
+  var defaultDueDate = today.getFullYear()+'-'+String(today.getMonth()+1).padStart(2,'0')+'-01';
+  var paidByOpts = _buildPaidByOptions('');
+  var bodyHtml = '<div>'
+    + '<div class="field-label">Bill Name</div>'
+    + '<input class="field-input" id="bd-name" placeholder="e.g. Spire, Building Insurance, Utilities" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Due Date</div>'
+    + '<input class="field-input" type="date" id="bd-duedate" value="'+defaultDueDate+'" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Description</div>'
+    + '<textarea class="field-input" id="bd-desc" placeholder="Brief description of this bill..." rows="2" style="resize:vertical;margin-bottom:10px;"></textarea>'
+    + '<div style="border-top:1.5px dashed #e2e8f0;margin:6px 0 10px;"></div>'
+    + '<div style="font-size:0.7rem;font-weight:800;color:#5b21b6;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Account Information</div>'
+    + '<div class="field-label">Account Number</div>'
+    + '<input class="field-input" id="bd-acctnum" placeholder="e.g. ACC-12345" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Phone Number</div>'
+    + '<input class="field-input" id="bd-phone" placeholder="e.g. (555) 123-4567" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Account Representative</div>'
+    + '<input class="field-input" id="bd-acctep" placeholder="Contact person name" style="margin-bottom:10px;"/>'
+    + '<div style="border-top:1.5px dashed #e2e8f0;margin:6px 0 10px;"></div>'
+    + '<div class="field-label">Subscription Type</div>'
+    + '<select id="bd-subtype" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;" onchange="document.getElementById(\'bd-amt-row\').style.display=(this.value!==\'none\'?\'block\':\'none\');">'
+      + '<option value="none">None (manual entry)</option><option value="monthly">Monthly Subscription</option><option value="yearly">Yearly Subscription</option>'
+    + '</select>'
+    + '<div id="bd-amt-row" style="display:none;margin-bottom:10px;"><div class="field-label">Recurring Amount ($)</div><input class="field-input" type="number" id="bd-subamt" min="0" step="0.01" placeholder="Amount for auto-payment"/></div>'
+    + '<div style="border-top:1.5px dashed #e2e8f0;margin:6px 0 10px;"></div>'
+    + '<div style="font-size:0.7rem;font-weight:800;color:#5b21b6;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Payment Details</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+      + '<div><div class="field-label">Amount ($)</div><input class="field-input" type="number" id="bd-amount" min="0" step="0.01" placeholder="0.00"/></div>'
+      + '<div><div class="field-label">Status</div>'
+        + '<select id="bd-paid" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;">'
+          + '<option value="1">\u2705 Paid</option><option value="0">\u23F3 Unpaid</option>'
+        + '</select></div>'
+    + '</div>'
+    + '<div class="field-label">Paid By</div>'
+    + '<select id="bd-paidby" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;">'+paidByOpts+'</select>'
+    + '<div class="field-label">Payment Method</div>'
+    + '<select id="bd-method" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;">'
+      + '<option value="">Select payment method...</option><option value="Cash">💵 Cash</option><option value="Debit/Credit">💳 Debit/Credit Card</option><option value="ACH">🏦 ACH Payment</option><option value="Check">✉️ Check (Mailed In)</option>'
+    + '</select>'
+    + '<div class="field-label">Confirmation / Ref #</div>'
+    + '<input class="field-input" id="bd-ref" placeholder="Reference or confirmation number" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Notes (optional)</div>'
+    + '<input class="field-input" id="bd-notes" placeholder="Optional notes" style="margin-bottom:6px;"/>'
+    + '<div id="bd-err" style="font-size:0.72rem;color:#dc2626;display:none;margin-top:4px;"></div>'
+    + '</div>';
+  openBillsModal('Add Bill', bodyHtml, function(){
+    var name       = ((document.getElementById('bd-name')||{}).value||'').trim();
+    var dueDateVal = (document.getElementById('bd-duedate')||{}).value||'';
+    var desc       = ((document.getElementById('bd-desc')||{}).value||'').trim();
+    var acctNum    = ((document.getElementById('bd-acctnum')||{}).value||'').trim();
+    var phone      = ((document.getElementById('bd-phone')||{}).value||'').trim();
+    var acctRep    = ((document.getElementById('bd-acctep')||{}).value||'').trim();
+    var amount     = parseFloat((document.getElementById('bd-amount')||{}).value||'NaN');
+    var paidBy     = ((document.getElementById('bd-paidby')||{}).value||'').trim();
+    var paid       = (document.getElementById('bd-paid')||{}).value !== '0';
+    var ref        = ((document.getElementById('bd-ref')||{}).value||'').trim();
+    var notes      = ((document.getElementById('bd-notes')||{}).value||'').trim();
+    var subType    = (document.getElementById('bd-subtype')||{}).value||'none';
+    var subAmt     = parseFloat((document.getElementById('bd-subamt')||{}).value||'0');
+    var method     = (document.getElementById('bd-method')||{}).value||'';
+    var errEl      = document.getElementById('bd-err');
+    if(!name){ if(errEl){errEl.textContent='Bill name is required';errEl.style.display='block';} return false; }
+    if(!dueDateVal){ if(errEl){errEl.textContent='Due date is required';errEl.style.display='block';} return false; }
+    var due = new Date(dueDateVal+'T12:00:00').getDate();
+    if(!due||due<1||due>31){ if(errEl){errEl.textContent='Invalid due date';errEl.style.display='block';} return false; }
+    if(isNaN(amount)||amount<0){ if(errEl){errEl.textContent='Amount is required';errEl.style.display='block';} return false; }
+    if(!paidBy){ if(errEl){errEl.textContent='Please select who paid this bill';errEl.style.display='block';} return false; }
+    if(!method){ if(errEl){errEl.textContent='Please select a payment method';errEl.style.display='block';} return false; }
+    if(subType!=='none' && (isNaN(subAmt)||subAmt<=0)){ if(errEl){errEl.textContent='Recurring amount is required for subscriptions';errEl.style.display='block';} return false; }
+    var newId = (Date.now()+'_'+Math.random().toString(36).slice(2,7));
+    var defs = getBillsDefs();
+    defs.push({ id: newId, name: name, dueDayOfMonth: due, description: desc, accountNumber: acctNum, phoneNumber: phone, accountRep: acctRep, subscriptionType: subType, recurringAmount: subAmt||0, active: true });
+    saveBillsDefs(defs);
+    var now2 = new Date();
+    var recs = getBillsRecords();
+    recs.push({ id:(Date.now()+'_'+Math.random().toString(36).slice(2,7)), billId:newId, billName:name,
+      year:_billsYear, month:now2.getMonth()+1,
+      dueDate:dueDateVal, paidBy:paidBy, paymentMethod:method,
+      amountCents:Math.round(amount*100), confirmationRef:ref, notes:notes,
+      paid:paid, timestamp:Date.now() });
+    saveBillsRecords(recs);
+    renderBillsView(_billsYear);
+    showToast('\u2705 Bill added: '+name, 'success');
+  });
+}
+
+// Edit a bill row definition
+function editBillDef(defId){
+  var defs = getBillsDefs();
+  var def = defs.find(function(d){ return d.id===defId; });
+  if(!def) return;
+  var today2 = new Date();
+  var defDueDateVal = today2.getFullYear()+'-'+String(today2.getMonth()+1).padStart(2,'0')+'-'+String(def.dueDayOfMonth||1).padStart(2,'0');
+  var bodyHtml = '<div>'
+    + '<div class="field-label">Bill Name</div>'
+    + '<input class="field-input" id="bd-name" value="'+esc(def.name)+'" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Due Date</div>'
+    + '<input class="field-input" type="date" id="bd-duedate" value="'+defDueDateVal+'" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Description</div>'
+    + '<textarea class="field-input" id="bd-desc" rows="2" style="resize:vertical;margin-bottom:10px;">'+esc(def.description||'')+'</textarea>'
+    + '<div style="border-top:1.5px dashed #e2e8f0;margin:6px 0 10px;"></div>'
+    + '<div style="font-size:0.7rem;font-weight:800;color:#5b21b6;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Account Information</div>'
+    + '<div class="field-label">Account Number</div>'
+    + '<input class="field-input" id="bd-acctnum" value="'+esc(def.accountNumber||'')+'" placeholder="e.g. ACC-12345" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Phone Number</div>'
+    + '<input class="field-input" id="bd-phone" value="'+esc(def.phoneNumber||'')+'" placeholder="e.g. (555) 123-4567" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Account Representative</div>'
+    + '<input class="field-input" id="bd-acctep" value="'+esc(def.accountRep||'')+'" placeholder="Contact person name" style="margin-bottom:10px;"/>'
+    + '<div style="border-top:1.5px dashed #e2e8f0;margin:6px 0 10px;"></div>'
+    + '<div class="field-label">Subscription Type</div>'
+    + '<select id="bd-subtype" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;" onchange="document.getElementById(\'bd-amt-row\').style.display=(this.value!==\'none\'?\'block\':\'none\');">'
+      + '<option value="none"'+((!def.subscriptionType||def.subscriptionType==='none')?' selected':'')+'>None (manual entry)</option>'
+      + '<option value="monthly"'+(def.subscriptionType==='monthly'?' selected':'')+'>Monthly Subscription</option>'
+      + '<option value="yearly"'+(def.subscriptionType==='yearly'?' selected':'')+'>Yearly Subscription</option>'
+    + '</select>'
+    + '<div id="bd-amt-row" style="display:'+(def.subscriptionType&&def.subscriptionType!=='none'?'block':'none')+';margin-bottom:10px;"><div class="field-label">Recurring Amount ($)</div><input class="field-input" type="number" id="bd-subamt" min="0" step="0.01" value="'+(def.recurringAmount||0)+'" placeholder="Amount for auto-payment"/></div>'
+    + '<label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;">'
+      + '<input type="checkbox" id="bd-active" '+(def.active!==false?'checked':'')+' style="width:18px;height:18px;accent-color:#7c3aed;"/>'
+      + '<span style="font-size:0.82rem;font-weight:700;">Active (show in table)</span>'
+    + '</label>'
+    + '<button onclick="deleteBillDef(\''+def.id+'\')" style="width:100%;padding:9px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:10px;font-size:0.8rem;font-weight:800;cursor:pointer;font-family:\'Nunito\',sans-serif;margin-bottom:10px;">\uD83D\uDDD1\uFE0F Delete Bill</button>'
+    + '<div id="bd-err" style="font-size:0.72rem;color:#dc2626;display:none;"></div>'
+    + '</div>';
+  openBillsModal('Edit Bill', bodyHtml, function(){
+    var name       = ((document.getElementById('bd-name')||{}).value||'').trim();
+    var dueDateVal = (document.getElementById('bd-duedate')||{}).value||'';
+    var desc       = ((document.getElementById('bd-desc')||{}).value||'').trim();
+    var acctNum    = ((document.getElementById('bd-acctnum')||{}).value||'').trim();
+    var phone      = ((document.getElementById('bd-phone')||{}).value||'').trim();
+    var acctRep    = ((document.getElementById('bd-acctep')||{}).value||'').trim();
+    var active     = !!(document.getElementById('bd-active')||{}).checked;
+    var subType    = (document.getElementById('bd-subtype')||{}).value||'none';
+    var subAmt     = parseFloat((document.getElementById('bd-subamt')||{}).value||'0');
+    var errEl      = document.getElementById('bd-err');
+    if(!name){ if(errEl){errEl.textContent='Bill name is required';errEl.style.display='block';} return false; }
+    if(!dueDateVal){ if(errEl){errEl.textContent='Due date is required';errEl.style.display='block';} return false; }
+    var due = new Date(dueDateVal+'T12:00:00').getDate();
+    if(!due||due<1||due>31){ if(errEl){errEl.textContent='Invalid due date';errEl.style.display='block';} return false; }
+    if(subType!=='none' && (isNaN(subAmt)||subAmt<=0)){ if(errEl){errEl.textContent='Recurring amount is required for subscriptions';errEl.style.display='block';} return false; }
+    def.name = name; def.dueDayOfMonth = due; def.description = desc; def.accountNumber = acctNum; def.phoneNumber = phone; def.accountRep = acctRep; def.subscriptionType = subType; def.recurringAmount = subAmt||0; def.active = active;
+    saveBillsDefs(defs);
+    renderBillsView(_billsYear);
+    showToast('\u2705 Bill updated', 'success');
+  });
+}
+
+// Record payment for empty cell
+function openAddBillRecord(billId, billName, year, month){
+  var def = getBillsDefs().find(function(d){ return d.id===billId; });
+  var dueDay = def ? def.dueDayOfMonth : 1;
+  var dueDateVal = year+'-'+String(month).padStart(2,'0')+'-'+String(dueDay).padStart(2,'0');
+  var paidByOpts = _buildPaidByOptions('');
+  var bodyHtml = '<div>'
+    + '<div style="background:#ede9fe;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:0.82rem;font-weight:800;color:#5b21b6;">'+esc(billName)+' \u2014 '+BILL_MONTHS_FULL[month-1]+' '+year+'</div>'
+    + (def && def.description ? '<div style="font-size:0.75rem;color:#64748b;margin-bottom:10px;font-style:italic;">'+esc(def.description)+'</div>' : '')
+    + '<div class="field-label">Due Date</div>'
+    + '<input class="field-input" type="date" id="br-duedate" value="'+dueDateVal+'" style="margin-bottom:10px;"/>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+      + '<div><div class="field-label">Amount ($)</div><input class="field-input" type="number" id="br-amount" min="0" step="0.01" placeholder="0.00"/></div>'
+      + '<div><div class="field-label">Status</div>'
+        + '<select id="br-paid" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;">'
+          + '<option value="1">\u2705 Paid</option><option value="0">\u23F3 Unpaid</option>'
+        + '</select></div>'
+    + '</div>'
+    + '<div class="field-label">Paid By</div>'
+    + '<select id="br-paidby" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;">'+paidByOpts+'</select>'
+    + '<div class="field-label">Payment Method</div>'
+    + '<select id="br-method" style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;">'
+      + '<option value="">Select payment method...</option><option value="Cash">💵 Cash</option><option value="Debit/Credit">💳 Debit/Credit Card</option><option value="ACH">🏦 ACH Payment</option><option value="Check">✉️ Check (Mailed In)</option>'
+    + '</select>'
+    + '<div class="field-label">Confirmation / Reference #</div>'
+    + '<input class="field-input" id="br-ref" placeholder="Confirmation or reference number" style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Notes (optional)</div>'
+    + '<input class="field-input" id="br-notes" placeholder="Optional notes" style="margin-bottom:6px;"/>'
+    + '<div id="br-err" style="font-size:0.72rem;color:#dc2626;display:none;margin-top:4px;"></div>'
+    + '</div>';
+  openBillsModal('Record Payment', bodyHtml, function(){
+    var amount  = parseFloat((document.getElementById('br-amount')||{}).value||'NaN');
+    var paidBy  = ((document.getElementById('br-paidby')||{}).value||'').trim();
+    var dueDate = (document.getElementById('br-duedate')||{}).value||'';
+    var paid    = (document.getElementById('br-paid')||{}).value !== '0';
+    var ref     = ((document.getElementById('br-ref')||{}).value||'').trim();
+    var notes   = ((document.getElementById('br-notes')||{}).value||'').trim();
+    var method  = (document.getElementById('br-method')||{}).value||'';
+    var errEl   = document.getElementById('br-err');
+    if(isNaN(amount)||amount<0){ if(errEl){errEl.textContent='Amount is required';errEl.style.display='block';} return false; }
+    if(!paidBy){ if(errEl){errEl.textContent='Please select who paid this bill';errEl.style.display='block';} return false; }
+    if(!method){ if(errEl){errEl.textContent='Please select a payment method';errEl.style.display='block';} return false; }
+    var recs = getBillsRecords();
+    recs.push({ id:(Date.now()+'_'+Math.random().toString(36).slice(2,7)), billId:billId, billName:billName, year:year, month:month,
+      dueDate:dueDate, paidBy:paidBy, paymentMethod:method,
+      amountCents:Math.round(amount*100), confirmationRef:ref, notes:notes, paid:paid, timestamp:Date.now() });
+    saveBillsRecords(recs);
+    renderBillsView(_billsYear);
+    showToast('\u2705 Payment recorded: '+billName, 'success');
+  });
+}
+
+// Edit existing payment record
+function openEditBillRecord(recordId){
+  var records = getBillsRecords();
+  var rec = records.find(function(r){ return r.id===recordId; });
+  if(!rec) return;
+  var canEdit = isFinanceEditor();
+  var dis = canEdit ? '' : ' disabled';
+  var isPaid = rec.paid !== false;
+  var defs = getBillsDefs();
+  var def = defs.find(function(d){ return d.id===rec.billId; });
+  var today3 = new Date();
+  var defDueDateVal = def
+    ? (today3.getFullYear()+'-'+String(today3.getMonth()+1).padStart(2,'0')+'-'+String(def.dueDayOfMonth||1).padStart(2,'0'))
+    : (rec.dueDate||'');
+  var paidByOpts = _buildPaidByOptions(rec.paidBy||'');
+  var bodyHtml = '<div>'
+    + '<div style="background:#ede9fe;border-radius:8px;padding:9px 12px;margin-bottom:12px;font-size:0.82rem;font-weight:800;color:#5b21b6;">'+esc(rec.billName)+' \u2014 '+BILL_MONTHS_FULL[(rec.month||1)-1]+' '+rec.year+'</div>'
+    + '<div class="field-label">Bill Name</div>'
+    + '<input class="field-input" id="br-billname" value="'+esc(rec.billName||'')+'"'+dis+' style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Due Date</div>'
+    + '<input class="field-input" type="date" id="br-duedate" value="'+(rec.dueDate||defDueDateVal)+'"'+dis+' style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Description</div>'
+    + '<textarea class="field-input" id="br-desc" rows="2" style="resize:vertical;margin-bottom:10px;"'+dis+'>'+esc((def&&def.description)||'')+'</textarea>'
+    + '<div style="border-top:1.5px dashed #e2e8f0;margin:6px 0 10px;"></div>'
+    + '<div style="font-size:0.7rem;font-weight:800;color:#5b21b6;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px;">Payment Details</div>'
+    + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px;">'
+      + '<div><div class="field-label">Amount ($)</div><input class="field-input" type="number" id="br-amount" min="0" step="0.01" value="'+((rec.amountCents||0)/100).toFixed(2)+'"'+dis+'/></div>'
+      + '<div><div class="field-label">Status</div>'
+        + '<select id="br-paid"'+dis+' style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;">'
+          + '<option value="1"'+(isPaid?' selected':'')+'>\u2705 Paid</option>'
+          + '<option value="0"'+(!isPaid?' selected':'')+'>\u23F3 Unpaid</option>'
+        + '</select></div>'
+    + '</div>'
+    + '<div class="field-label">Paid By</div>'
+    + '<select id="br-paidby"'+dis+' style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;">'+paidByOpts+'</select>'
+    + '<div class="field-label">Payment Method</div>'
+    + '<select id="br-method"'+dis+' style="width:100%;padding:9px 10px;border:2px solid var(--border);border-radius:10px;font-family:\'Nunito\',sans-serif;font-size:0.85rem;outline:none;margin-bottom:10px;">'
+      + '<option value="">Select payment method...</option><option value="Cash"'+(rec.paymentMethod==='Cash'?' selected':'')+'>  💵 Cash</option>'
+      + '<option value="Debit/Credit"'+(rec.paymentMethod==='Debit/Credit'?' selected':'')+'>  💳 Debit/Credit Card</option>'
+      + '<option value="ACH"'+(rec.paymentMethod==='ACH'?' selected':'')+'>  🏦 ACH Payment</option>'
+      + '<option value="Check"'+(rec.paymentMethod==='Check'?' selected':'')+'>  ✉️ Check (Mailed In)</option>'
+    + '</select>'
+    + '<div class="field-label">Confirmation / Reference #</div>'
+    + '<input class="field-input" id="br-ref" value="'+esc(rec.confirmationRef||'')+'"'+dis+' style="margin-bottom:10px;"/>'
+    + '<div class="field-label">Notes (optional)</div>'
+    + '<input class="field-input" id="br-notes" value="'+esc(rec.notes||'')+'"'+dis+' style="margin-bottom:6px;"/>'
+    + (canEdit ? '<button onclick="deleteBillRecord(\''+recordId+'\')" style="width:100%;padding:9px;background:#fee2e2;color:#dc2626;border:1.5px solid #fca5a5;border-radius:10px;font-size:0.8rem;font-weight:800;cursor:pointer;font-family:\'Nunito\',sans-serif;margin-top:8px;">\uD83D\uDDD1\uFE0F Delete Record</button>' : '')
+    + '<div id="br-err" style="font-size:0.72rem;color:#dc2626;display:none;margin-top:6px;"></div>'
+    + '</div>';
+  if(!canEdit){ openBillsModal('View Payment', bodyHtml, null); return; }
+  openBillsModal('Edit Payment', bodyHtml, function(){
+    var billName2 = ((document.getElementById('br-billname')||{}).value||'').trim();
+    var amount    = parseFloat((document.getElementById('br-amount')||{}).value||'NaN');
+    var paidBy    = ((document.getElementById('br-paidby')||{}).value||'').trim();
+    var dueDate   = (document.getElementById('br-duedate')||{}).value||'';
+    var paid      = (document.getElementById('br-paid')||{}).value !== '0';
+    var ref       = ((document.getElementById('br-ref')||{}).value||'').trim();
+    var notes     = ((document.getElementById('br-notes')||{}).value||'').trim();
+    var desc      = ((document.getElementById('br-desc')||{}).value||'').trim();
+    var method    = (document.getElementById('br-method')||{}).value||'';
+    var errEl     = document.getElementById('br-err');
+    if(!billName2){ if(errEl){errEl.textContent='Bill name is required';errEl.style.display='block';} return false; }
+    if(isNaN(amount)||amount<0){ if(errEl){errEl.textContent='Amount is required';errEl.style.display='block';} return false; }
+    if(!paidBy){ if(errEl){errEl.textContent='Please select who paid this bill';errEl.style.display='block';} return false; }
+    if(!method){ if(errEl){errEl.textContent='Please select a payment method';errEl.style.display='block';} return false; }
+    if(def){
+      def.name = billName2;
+      if(dueDate){ def.dueDayOfMonth = new Date(dueDate+'T12:00:00').getDate(); }
+      def.description = desc;
+      saveBillsDefs(defs);
+    }
+    rec.billName=billName2; rec.amountCents=Math.round(amount*100); rec.paidBy=paidBy; rec.paymentMethod=method;
+    rec.dueDate=dueDate; rec.paid=paid; rec.confirmationRef=ref; rec.notes=notes;
+    saveBillsRecords(records);
+    renderBillsView(_billsYear);
+    showToast('\u2705 Payment updated', 'success');
+  });
+}
+function deleteBillRecord(recordId){
+  closeBillsModal();
+  showModal('Delete Record','Are you sure you want to delete this payment record?', function(){
+    saveBillsRecords(getBillsRecords().filter(function(r){ return r.id!==recordId; }));
+    renderBillsView(_billsYear);
+    showToast('Record deleted','success');
+  });
+}
+
+function showBillContactInfo(defId, billName){
+  var defs = getBillsDefs();
+  var def = defs.find(function(d){ return d.id===defId; });
+  if(!def) return;
+  var bodyHtml = '<div>'
+    + '<div style="font-size:0.7rem;font-weight:800;color:#5b21b6;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:10px;">Account Information</div>'
+    + '<div class="field-label">Account Number</div>'
+    + '<input class="field-input" value="'+esc(def.accountNumber||'—')+'" readonly style="margin-bottom:10px;background:#f8fafc;cursor:default;"/>'
+    + '<div class="field-label">Phone Number</div>'
+    + '<input class="field-input" value="'+esc(def.phoneNumber||'—')+'" readonly style="margin-bottom:10px;background:#f8fafc;cursor:default;"/>'
+    + '<div class="field-label">Account Representative</div>'
+    + '<input class="field-input" value="'+esc(def.accountRep||'—')+'" readonly style="margin-bottom:6px;background:#f8fafc;cursor:default;"/>'
+    + '</div>';
+  openBillsModal(billName, bodyHtml, null);
+}
+
+function deleteBillDef(defId){
+  closeBillsModal();
+  showModal('Delete Bill','Are you sure you want to delete this bill and all its payment records?', function(){
+    var defs = getBillsDefs();
+    var recs = getBillsRecords();
+    defs = defs.filter(function(d){ return d.id!==defId; });
+    recs = recs.filter(function(r){ return r.billId!==defId; });
+    saveBillsDefs(defs);
+    saveBillsRecords(recs);
+    renderBillsView(_billsYear);
+    showToast('Bill deleted','success');
+  });
+}
+
 
 // ── Records home — shows Expenses + Offering folder buttons ──
 
@@ -5639,6 +6310,17 @@ function openFinanceRecordsHome(){
         <span style="font-size:2.6rem;">🙏</span>
         <span style="font-weight:800;font-size:0.85rem;color:#065f46;font-family:'Cinzel',serif;letter-spacing:0.03em;">OFFERING</span>
         <span style="font-size:0.7rem;color:#064e3b;opacity:0.8;">Sadaka / Zaka</span>
+      </button>
+      <button onclick="openFinanceBills()" style="
+        display:flex;flex-direction:column;align-items:center;justify-content:center;
+        padding:28px 12px;gap:10px;
+        background:linear-gradient(135deg,#ede9fe,#ddd6fe);
+        border:2px solid #7c3aed;border-radius:16px;cursor:pointer;
+        font-family:'Nunito',sans-serif;
+        box-shadow:0 4px 14px rgba(124,58,237,0.25);">
+        <span style="font-size:2.6rem;">🧾</span>
+        <span style="font-weight:800;font-size:0.85rem;color:#4c1d95;font-family:'Cinzel',serif;letter-spacing:0.03em;">BILLS</span>
+        <span style="font-size:0.7rem;color:#5b21b6;opacity:0.8;">Malipo ya Bili</span>
       </button>
     </div>`;
 }
@@ -12473,6 +13155,44 @@ function startNotePolling(){
     renderReadNotes();
   }, 4000);
 }
+function _initializeBillsIfNeeded(){
+  try{
+    var existing = ld(K_FIN_BILLS_DEFS, []);
+    if(existing && existing.length > 0) return; // Already have bills
+    
+    var bills = [
+      {id:'0_ch',name:'Church Mortgage',displayOrder:0,dueDayOfMonth:1,description:'Monthly mortgage payment',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'1_ga',name:'Gas - Spire',displayOrder:1,dueDayOfMonth:1,description:'Natural gas utility service',accountNumber:'',phoneNumber:'(800) 582-1234',accountRep:'Spire Energy',subscriptionType:'none',active:true},
+      {id:'2_wa',name:'Water mgmt (WM)',displayOrder:2,dueDayOfMonth:1,description:'Water management services',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'3_am',name:'Amoren',displayOrder:3,dueDayOfMonth:1,description:'Account maintenance',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'4_aw',name:'American Water',displayOrder:4,dueDayOfMonth:1,description:'Water utility services',accountNumber:'',phoneNumber:'(855) 705-8438',accountRep:'American Water Company',subscriptionType:'none',active:true},
+      {id:'5_at',name:'Internet (AT&T)',displayOrder:5,dueDayOfMonth:1,description:'Internet and phone service',accountNumber:'',phoneNumber:'(800) 288-2020',accountRep:'AT&T Customer Service',subscriptionType:'none',active:true},
+      {id:'6_mv',name:'Motor Van Insurance',displayOrder:6,dueDayOfMonth:1,description:'Vehicle insurance coverage',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'7_ms',name:'MSP (Long Lake)',displayOrder:7,dueDayOfMonth:1,description:'Long Lake facility management',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'8_ge',name:'General/Elevator',displayOrder:8,dueDayOfMonth:1,description:'Elevator maintenance and repair',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'9_do',name:'Donna Tel Services',displayOrder:9,dueDayOfMonth:1,description:'Telephone services',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'10_ps',name:'Public Storage',displayOrder:10,dueDayOfMonth:1,description:'Storage unit rental',accountNumber:'',phoneNumber:'(800) 688-8057',accountRep:'Public Storage',subscriptionType:'none',active:true},
+      {id:'11_sf',name:'Shift 4 - Fees',displayOrder:11,dueDayOfMonth:1,description:'Payment processing fees',accountNumber:'',phoneNumber:'',accountRep:'Shift4 Payments',subscriptionType:'none',active:true},
+      {id:'12_mr',name:'Motor Van Repair',displayOrder:12,dueDayOfMonth:1,description:'Vehicle maintenance and repair',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'13_ci',name:'Church Insurance',displayOrder:13,dueDayOfMonth:1,description:'Church property and liability insurance',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'14_sp',name:'Senior Pastor Housing Assist',displayOrder:14,dueDayOfMonth:1,description:'Housing assistance for senior pastor',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'15_op',name:'Other Pastor Bill Assist',displayOrder:15,dueDayOfMonth:1,description:'Assistance with other pastor bills',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'16_st',name:'Stationery',displayOrder:16,dueDayOfMonth:1,description:'Office supplies and stationery',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'17_te',name:'TECH - Electronics',displayOrder:17,dueDayOfMonth:1,description:'Technology equipment and electronics charges',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'18_ml',name:'Madeleine Loan',displayOrder:18,dueDayOfMonth:1,description:'Loan payment',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'19_sb',name:'SBA Loan',displayOrder:19,dueDayOfMonth:1,description:'Small Business Administration loan payment',accountNumber:'',phoneNumber:'(800) 659-2955',accountRep:'SBA Loan Servicing',subscriptionType:'none',active:true},
+      {id:'20_cc',name:'Church Cleaning & Repair',displayOrder:20,dueDayOfMonth:1,description:'Building cleaning and maintenance',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'21_ac',name:'Annual Conference Expenses',displayOrder:21,dueDayOfMonth:1,description:'Annual conference registration and expenses',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true},
+      {id:'22_ou',name:'Other Utilities',displayOrder:22,dueDayOfMonth:1,description:'Miscellaneous utility expenses',accountNumber:'',phoneNumber:'',accountRep:'',subscriptionType:'none',active:true}
+    ];
+    
+    sv(K_FIN_BILLS_DEFS, bills);
+    console.log('✅ Initialized 23 bills with contact information');
+  }catch(e){
+    console.error('Error initializing bills:', e);
+  }
+}
+
 
 // Wire up FAB visibility and polling on goMain
 const _origGoMain = goMain;
@@ -12972,74 +13692,23 @@ window._stickyNoteInit = _noteInit;
   }
   window.renderChurchCalendar2026 = renderCalendar;
 })();
-</script>
 
-<script>
+
 // Fix: admin modals are inside #screen-main which has opacity:0 (stacking context z-index:1)
 // when screen-admin is active. Moving them to <body> gives them true global z-index ordering.
 document.addEventListener('DOMContentLoaded', function(){
   var modalIds = [
     'edit-win-modal','add-dept-modal','wasim-sched-edit-modal','usher-sched-edit-modal',
-    'cmod-activity','cmod-actlist','cmod-holidays','cmod-pastor','cmod-depts'
+    'cmod-activity','cmod-actlist','cmod-holidays','cmod-pastor','cmod-depts',
+    'bills-modal'
   ];
   modalIds.forEach(function(id){
     var el = document.getElementById(id);
     if(el && el.parentElement !== document.body) document.body.appendChild(el);
   });
 });
-</script>
 
-<!-- ── Sync Users Modal ── -->
-<div id="sync-users-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;align-items:center;justify-content:center;padding:16px;">
-  <div style="background:white;border-radius:20px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.35);">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-      <h3 style="font-family:'Cinzel',serif;color:#1e40af;font-size:1rem;margin:0;">🔄 Sync Users Across Devices</h3>
-      <button onclick="closeSyncModal()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:#94a3b8;line-height:1;">✕</button>
-    </div>
 
-    <!-- Download Updated HTML -->
-    <div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:13px;padding:14px;margin-bottom:14px;">
-      <div style="font-weight:800;font-size:0.88rem;color:#1e40af;margin-bottom:6px;">🌐 Option 1 — Download Updated HTML</div>
-      <p style="font-size:0.8rem;color:#475569;margin:0 0 10px;line-height:1.5;">
-        Bakes the current user list (with updated passwords) into the HTML file.
-        Re-upload this file to Vercel so <strong>all browsers</strong> see the new defaults.
-      </p>
-      <button onclick="syncDownloadHTML()" style="width:100%;padding:10px;background:linear-gradient(135deg,#1d4ed8,#1e40af);color:white;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:800;font-size:0.85rem;cursor:pointer;">
-        ⬇️ Download Updated HTML File
-      </button>
-      <div id="sync-dl-status" style="font-size:0.78rem;color:#16a34a;margin-top:7px;display:none;text-align:center;font-weight:700;"></div>
-    </div>
-
-    <!-- Export JSON -->
-    <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:13px;padding:14px;margin-bottom:14px;">
-      <div style="font-weight:800;font-size:0.88rem;color:#15803d;margin-bottom:6px;">📤 Option 2 — Export Users JSON</div>
-      <p style="font-size:0.8rem;color:#475569;margin:0 0 10px;line-height:1.5;">
-        Copy the current user data and paste it into another browser using Option 3 below.
-      </p>
-      <button onclick="syncExportJSON()" style="width:100%;padding:10px;background:linear-gradient(135deg,#16a34a,#15803d);color:white;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:800;font-size:0.85rem;cursor:pointer;">
-        📋 Copy Users JSON to Clipboard
-      </button>
-      <div id="sync-export-status" style="font-size:0.78rem;color:#16a34a;margin-top:7px;display:none;text-align:center;font-weight:700;"></div>
-    </div>
-
-    <!-- Import JSON -->
-    <div style="background:#fefce8;border:1.5px solid #fde047;border-radius:13px;padding:14px;margin-bottom:18px;">
-      <div style="font-weight:800;font-size:0.88rem;color:#854d0e;margin-bottom:6px;">📥 Option 3 — Import Users JSON</div>
-      <p style="font-size:0.8rem;color:#475569;margin:0 0 8px;line-height:1.5;">
-        Paste the JSON exported from another browser to sync user data here.
-      </p>
-      <textarea id="sync-import-txt" rows="5" placeholder="Paste users JSON here..." style="width:100%;box-sizing:border-box;padding:10px;border:2px solid #fde047;border-radius:9px;font-family:'Courier New',monospace;font-size:0.75rem;outline:none;resize:vertical;background:#fefce8;"></textarea>
-      <button onclick="syncImportJSON()" style="width:100%;padding:10px;margin-top:8px;background:linear-gradient(135deg,#ca8a04,#854d0e);color:white;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:800;font-size:0.85rem;cursor:pointer;">
-        ✅ Apply Imported Users
-      </button>
-      <div id="sync-import-status" style="font-size:0.78rem;margin-top:7px;display:none;text-align:center;font-weight:700;"></div>
-    </div>
-
-    <button onclick="closeSyncModal()" style="width:100%;padding:10px;background:#f1f5f9;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer;color:#64748b;">Close</button>
-  </div>
-</div>
-
-<script>
 // ── Sync Users Modal ──
 (function(){
   window.openSyncModal = function(){
@@ -13151,15 +13820,8 @@ document.addEventListener('DOMContentLoaded', function(){
     if(typeof showToast === 'function') showToast('Users synced successfully', 'success');
   };
 })();
-</script>
 
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- FIREBASE REAL-TIME LISTENERS                                   -->
-<!-- Connects testimony names and sticky notes to Firebase so       -->
-<!-- ALL devices (including Msimamizi's screen) update instantly    -->
-<!-- when any change is made.                                       -->
-<!-- ═══════════════════════════════════════════════════════════════ -->
-<script>
+
 (function(){
   // Wait until the DOM is ready and all app functions are defined
   function attachFirebaseListeners(){
@@ -13555,7 +14217,84 @@ document.addEventListener('DOMContentLoaded', function(){
     attachFirebaseListeners();
   }
 })();
+
 </script>
 
+
+
+<!-- ── Sync Users Modal ── -->
+<div id="sync-users-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:99999;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:white;border-radius:20px;padding:24px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto;box-shadow:0 24px 60px rgba(0,0,0,0.35);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+      <h3 style="font-family:'Cinzel',serif;color:#1e40af;font-size:1rem;margin:0;">🔄 Sync Users Across Devices</h3>
+      <button onclick="closeSyncModal()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:#94a3b8;line-height:1;">✕</button>
+    </div>
+
+    <!-- Download Updated HTML -->
+    <div style="background:#eff6ff;border:1.5px solid #93c5fd;border-radius:13px;padding:14px;margin-bottom:14px;">
+      <div style="font-weight:800;font-size:0.88rem;color:#1e40af;margin-bottom:6px;">🌐 Option 1 — Download Updated HTML</div>
+      <p style="font-size:0.8rem;color:#475569;margin:0 0 10px;line-height:1.5;">
+        Bakes the current user list (with updated passwords) into the HTML file.
+        Re-upload this file to Vercel so <strong>all browsers</strong> see the new defaults.
+      </p>
+      <button onclick="syncDownloadHTML()" style="width:100%;padding:10px;background:linear-gradient(135deg,#1d4ed8,#1e40af);color:white;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:800;font-size:0.85rem;cursor:pointer;">
+        ⬇️ Download Updated HTML File
+      </button>
+      <div id="sync-dl-status" style="font-size:0.78rem;color:#16a34a;margin-top:7px;display:none;text-align:center;font-weight:700;"></div>
+    </div>
+
+    <!-- Export JSON -->
+    <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:13px;padding:14px;margin-bottom:14px;">
+      <div style="font-weight:800;font-size:0.88rem;color:#15803d;margin-bottom:6px;">📤 Option 2 — Export Users JSON</div>
+      <p style="font-size:0.8rem;color:#475569;margin:0 0 10px;line-height:1.5;">
+        Copy the current user data and paste it into another browser using Option 3 below.
+      </p>
+      <button onclick="syncExportJSON()" style="width:100%;padding:10px;background:linear-gradient(135deg,#16a34a,#15803d);color:white;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:800;font-size:0.85rem;cursor:pointer;">
+        📋 Copy Users JSON to Clipboard
+      </button>
+      <div id="sync-export-status" style="font-size:0.78rem;color:#16a34a;margin-top:7px;display:none;text-align:center;font-weight:700;"></div>
+    </div>
+
+    <!-- Import JSON -->
+    <div style="background:#fefce8;border:1.5px solid #fde047;border-radius:13px;padding:14px;margin-bottom:18px;">
+      <div style="font-weight:800;font-size:0.88rem;color:#854d0e;margin-bottom:6px;">📥 Option 3 — Import Users JSON</div>
+      <p style="font-size:0.8rem;color:#475569;margin:0 0 8px;line-height:1.5;">
+        Paste the JSON exported from another browser to sync user data here.
+      </p>
+      <textarea id="sync-import-txt" rows="5" placeholder="Paste users JSON here..." style="width:100%;box-sizing:border-box;padding:10px;border:2px solid #fde047;border-radius:9px;font-family:'Courier New',monospace;font-size:0.75rem;outline:none;resize:vertical;background:#fefce8;"></textarea>
+      <button onclick="syncImportJSON()" style="width:100%;padding:10px;margin-top:8px;background:linear-gradient(135deg,#ca8a04,#854d0e);color:white;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:800;font-size:0.85rem;cursor:pointer;">
+        ✅ Apply Imported Users
+      </button>
+      <div id="sync-import-status" style="font-size:0.78rem;margin-top:7px;display:none;text-align:center;font-weight:700;"></div>
+    </div>
+
+    <button onclick="closeSyncModal()" style="width:100%;padding:10px;background:#f1f5f9;border:none;border-radius:9px;font-family:'Nunito',sans-serif;font-weight:700;font-size:0.85rem;cursor:pointer;color:#64748b;">Close</button>
+  </div>
+</div>
+
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- FIREBASE REAL-TIME LISTENERS                                   -->
+<!-- Connects testimony names and sticky notes to Firebase so       -->
+<!-- ALL devices (including Msimamizi's screen) update instantly    -->
+<!-- when any change is made.                                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+
+
+<div id="bills-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);z-index:99998;align-items:center;justify-content:center;padding:16px;">
+  <div style="background:white;border-radius:20px;padding:22px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px;">
+      <h3 id="bills-modal-title" style="font-family:'Cinzel',serif;color:#1e3a8a;font-size:0.95rem;margin:0;">🧾 Bills</h3>
+      <button onclick="closeBillsModal()" style="background:none;border:none;font-size:1.3rem;cursor:pointer;color:#64748b;line-height:1;">✕</button>
+    </div>
+    <div id="bills-modal-body"></div>
+    <div id="bills-modal-footer" style="display:flex;gap:8px;margin-top:14px;">
+      <button onclick="closeBillsModal()" style="flex:1;padding:10px;background:#f1f5f9;color:#475569;border:none;border-radius:9px;font-family:'Cinzel',serif;font-weight:700;font-size:0.83rem;cursor:pointer;">Cancel</button>
+      <button id="bills-modal-save" onclick="runBillsModal()" style="flex:2;padding:10px;background:linear-gradient(135deg,#1d4ed8,#1e3a8a);color:white;border:none;border-radius:9px;font-family:'Cinzel',serif;font-weight:700;font-size:0.83rem;cursor:pointer;">💾 Save</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
